@@ -115,7 +115,7 @@ export class MinerClient {
     this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+10000`;
     this.password = password || 'x';
     // Each RandomX worker maps 272MB. More than 2 tabs the machine into swap.
-    this.threads = Math.max(1, Math.min(2, hardwareThreads(), threads | 0 || 1));
+    this.threads = Math.max(1, Math.min(4, hardwareThreads(), threads | 0 || 1));
     this.bridgeUrl = url;
     this.#spawnWorkers(this.threads);
     this.#connect();
