@@ -233,7 +233,9 @@ export class MinerClient {
     if (obj.id === this.loginId) {
       this.loginId = null;
       if (obj.error) {
-        this.#emit('error', { message: 'Login failed: ' + (obj.error.message || JSON.stringify(obj.error)) });
+        const em = obj.error.message || JSON.stringify(obj.error);
+        this.#emit('error', { message: 'Login failed: ' + em });
+        if (/suspended/i.test(em)) this.#scheduleReconnect(10 * 60 * 1000);
         return;
       }
       const result = obj.result || {};
@@ -277,13 +279,14 @@ export class MinerClient {
     }
   }
 
-  #scheduleReconnect() {
+  #scheduleReconnect(ms) {
     if (!this.wantRun) return;
     if (this.reconnectTimer) return;
+    const wait = Math.max(3000, ms || 3000);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.wantRun) this.#connect();
-    }, 3000);
+    }, wait);
   }
 
   #spawnWorkers(n) {
@@ -313,23 +316,6 @@ export class MinerClient {
     if (!data || typeof data !== 'object') return;
     if (data.type === 'debug') {
       this.#emit('status', { message: `hash sample ${String(data.result || '').slice(0, 16)}… target ${data.target} ok=${data.ok}` });
-      return;
-    }
-    if (data.type === 'probe') {
-      const id = this.#nextId();
-      this.submitIds.set(id, 'probe');
-      this.#send({
-        id,
-        jsonrpc: '2.0',
-        method: 'submit',
-        params: {
-          id: this.sessionId,
-          job_id: data.job_id,
-          nonce: data.nonce,
-          result: data.result,
-        },
-      });
-      this.#emit('status', { message: 'Probe share sent (expect low-diff if RandomX is valid).' });
       return;
     }
     if (data.type === 'ready') {
