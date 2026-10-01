@@ -114,15 +114,19 @@ export class MinerClient {
     // MO start-diff is wallet+N (password d=N is ignored). Floor is 10000.
     this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+10000`;
     this.password = password || 'x';
-    this.threads = Math.max(1, Math.min(hardwareThreads(), threads | 0 || 1));
+    // Each RandomX worker maps 272MB. More than 2 tabs the machine into swap.
+    this.threads = Math.max(1, Math.min(2, hardwareThreads(), threads | 0 || 1));
     this.bridgeUrl = url;
     this.#spawnWorkers(this.threads);
     this.#connect();
     this.pingTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         try { this.ws.send('ping'); } catch { /* ignore */ }
+        if (this.sessionId) {
+          this.#send({ id: this.#nextId(), jsonrpc: '2.0', method: 'keepalived', params: { id: this.sessionId } });
+        }
       }
-    }, 25000);
+    }, 20000);
     this.statsTimer = setInterval(() => {
       this.hashrate = this.windowHashes / 2;
       this.windowHashes = 0;
@@ -239,10 +243,12 @@ export class MinerClient {
       return;
     }
     if (this.submitIds.has(obj.id)) {
+      const kind = this.submitIds.get(obj.id);
       this.submitIds.delete(obj.id);
+      const msg = obj.error?.message || (obj.result === false ? 'false' : JSON.stringify(obj.result));
       if (obj.error || obj.result === false) {
-        this.rejected += 1;
-        this.#emit('error', { message: 'Share rejected: ' + (obj.error?.message || 'false') });
+        if (kind !== 'probe') this.rejected += 1;
+        this.#emit('error', { message: (kind === 'probe' ? 'Probe: ' : 'Share rejected: ') + msg });
       } else {
         this.accepted += 1;
         this.#emit('accepted', {});
@@ -307,6 +313,23 @@ export class MinerClient {
     if (!data || typeof data !== 'object') return;
     if (data.type === 'debug') {
       this.#emit('status', { message: `hash sample ${String(data.result || '').slice(0, 16)}… target ${data.target} ok=${data.ok}` });
+      return;
+    }
+    if (data.type === 'probe') {
+      const id = this.#nextId();
+      this.submitIds.set(id, 'probe');
+      this.#send({
+        id,
+        jsonrpc: '2.0',
+        method: 'submit',
+        params: {
+          id: this.sessionId,
+          job_id: data.job_id,
+          nonce: data.nonce,
+          result: data.result,
+        },
+      });
+      this.#emit('status', { message: 'Probe share sent (expect low-diff if RandomX is valid).' });
       return;
     }
     if (data.type === 'ready') {

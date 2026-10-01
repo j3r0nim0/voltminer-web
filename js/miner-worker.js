@@ -140,6 +140,13 @@ function hashOnce() {
       ok,
       h64: bytesToHex(rx.output.subarray(0, 8)),
     });
+    // One probe share: pool says "low difficulty" (hash OK) vs "invalid" (wasm wrong).
+    postMessage({
+      type: 'probe',
+      job_id: job.job_id,
+      nonce: nonceHex,
+      result,
+    });
   }
   return { nonceHex, result, ok };
 }
