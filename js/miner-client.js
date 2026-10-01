@@ -110,10 +110,10 @@ export class MinerClient {
     this.rpcId = 1;
     this.submitIds.clear();
     this.sessionId = null;
-    this.wallet = wallet.trim();
-    // MoneroOcean: "name,d=N" sets start difficulty. Default ~320k is hours at 15 H/s.
-    const rawPass = password || 'x';
-    this.password = /(?:^|,)d=\d+/i.test(rawPass) ? rawPass : `${rawPass},d=100`;
+    const rawWallet = wallet.trim();
+    // MO start-diff is wallet+N (password d=N is ignored). Floor is 10000.
+    this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+10000`;
+    this.password = password || 'x';
     this.threads = Math.max(1, Math.min(hardwareThreads(), threads | 0 || 1));
     this.bridgeUrl = url;
     this.#spawnWorkers(this.threads);
