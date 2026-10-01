@@ -1,27 +1,12 @@
-/* Registers the service worker and surfaces an install prompt when the browser offers one.
-   Classic script (no import.meta). Relative URLs so GitHub project Pages works. */
+/* Experimental miner: do not persist a service worker. Cached mine.js was
+   serving a duplicate #consent id and Start always failed. Mining needs a
+   live network anyway (bridge WebSocket). */
 (() => {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {
-        /* registration is best-effort — mining still works without it */
-      });
-    });
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((r) => r.unregister());
+  }).catch(() => {});
+  if (window.caches && caches.keys) {
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).catch(() => {});
   }
-
-  let deferredPrompt = null;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    document.querySelectorAll('[data-pwa-install]').forEach((btn) => {
-      btn.hidden = false;
-      btn.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice.catch(() => {});
-        deferredPrompt = null;
-        document.querySelectorAll('[data-pwa-install]').forEach((b) => { b.hidden = true; });
-      }, { once: true });
-    });
-  });
 })();

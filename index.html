@@ -65,9 +65,9 @@
             <span class="muted" id="threads-max"></span></label>
           <input id="threads" type="range" min="1" max="4" step="1" />
 
-          <label class="consent-row">
-            <input id="consent-ok" type="checkbox" />
-            <span>I understand this will use CPU on this device, that ad-blockers may need to be paused, and that I am mining to the wallet above.</span>
+          <label class="consent-row" id="consent-row">
+            <input id="consent-ok" name="consent" type="checkbox" />
+            <span><strong>I agree — start hashing on this device</strong> to the wallet above. Ad-blockers may need to be paused.</span>
           </label>
 
           <div class="mine-actions">
@@ -104,7 +104,7 @@
     </div>
   </footer>
 
-  <script src="js/pwa.js"></script>
-  <script type="module" src="js/mine.js"></script>
+  <script src="js/pwa.js?v=4"></script>
+  <script type="module" src="js/mine.js?v=4"></script>
 </body>
 </html>

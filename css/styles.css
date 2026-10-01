@@ -190,10 +190,19 @@ footer a:hover { color: var(--text); }
 .mine-panel input[type="text"]:focus { outline: none; border-color: var(--volt); }
 .mine-panel input[type="range"] { width: 100%; accent-color: var(--volt); }
 .consent-row {
-  display: flex; gap: 10px; align-items: flex-start;
-  margin: 18px 0 8px; color: var(--muted); font-size: 0.95rem;
+  display: flex; gap: 12px; align-items: center;
+  margin: 18px 0 8px; color: var(--text); font-size: 1rem;
+  padding: 14px 16px; border: 2px solid var(--volt); border-radius: 12px;
+  background: var(--bg-3); cursor: pointer; user-select: none;
 }
-.consent-row input { margin-top: 4px; accent-color: var(--volt); }
+.consent-row:has(input:checked) {
+  background: rgba(255, 210, 30, 0.16);
+  border-color: var(--volt);
+}
+.consent-row input {
+  width: 22px; height: 22px; min-width: 22px; margin: 0;
+  accent-color: var(--volt); cursor: pointer;
+}
 .mine-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 .mine-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
 .mine-stats {

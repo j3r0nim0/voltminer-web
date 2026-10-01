@@ -12,7 +12,7 @@ const walletEl = $('wallet');
 const threadsEl = $('threads');
 const threadsVal = $('threads-val');
 const threadsMax = $('threads-max');
-const consentEl = $('consent-ok');
+const consentEl = document.querySelector('#mine-form input[name="consent"]') || $('consent-ok');
 const form = $('mine-form');
 const startBtn = $('start');
 const stopBtn = $('stop');
@@ -84,8 +84,15 @@ function startMining() {
     setStatus(`That is not a Monero mainnet address (${wallet.length} chars). Standard is 95, integrated is 106. Never a private key.`);
     return;
   }
+  if (!consentEl) {
+    setStatus('Consent checkbox missing — hard-refresh (Cmd-Shift-R).');
+    return;
+  }
   if (!consentEl.checked) {
-    setStatus('Tick the consent box first.');
+    consentEl.focus();
+    const row = document.getElementById('consent-row');
+    if (row) row.style.outline = '3px solid var(--red, #ff5a5a)';
+    setStatus('Tick the yellow box under Threads first (the one that says “I agree”).');
     return;
   }
   try { localStorage.setItem('voltminer.web.wallet', wallet); } catch (_) { /* ignore */ }
