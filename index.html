@@ -58,7 +58,7 @@
         <form id="mine-form" autocomplete="on">
           <label class="mine-label" for="wallet">Monero wallet</label>
           <input id="wallet" name="wallet" type="text" spellcheck="false" autocomplete="off"
-                 placeholder="4… or 8… mainnet address" required />
+                 placeholder="4… or 8… mainnet address" />
           <p class="note" id="wallet-hint">Standard (95) or integrated (106) Monero address. Never a private key.</p>
 
           <label class="mine-label" for="threads">Threads: <strong id="threads-val">—</strong>
@@ -66,7 +66,7 @@
           <input id="threads" type="range" min="1" max="4" step="1" />
 
           <label class="consent-row">
-            <input id="consent" type="checkbox" required />
+            <input id="consent" type="checkbox" />
             <span>I understand this will use CPU on this device, that ad-blockers may need to be paused, and that I am mining to the wallet above.</span>
           </label>
 
@@ -84,6 +84,7 @@
           <div class="stat"><span class="k">Hashes</span><span class="v" id="st-tot">0</span></div>
           <div class="stat"><span class="k">Worker</span><span class="v mono" id="st-wid">—</span></div>
         </div>
+        <p class="note" id="js-gate">If Start does nothing, this page’s JavaScript did not load — pause the ad-blocker on this tab and hard-refresh (Cmd-Shift-R).</p>
         <p class="note" id="st-log"></p>
         <p class="note">Verify shares on the
           <a id="mo-link" href="https://moneroocean.stream/" target="_blank" rel="noopener">MoneroOcean dashboard</a>

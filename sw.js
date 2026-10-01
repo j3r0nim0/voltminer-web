@@ -1,7 +1,7 @@
 /* VoltMiner PWA service worker — caches the app shell so the miner opens offline.
    Mining itself still needs a live WebSocket to the VPS bridge.
    Relative paths: GitHub project Pages is https://<user>.github.io/<repo>/ not /. */
-const CACHE = 'voltminer-web-miner-v1';
+const CACHE = 'voltminer-web-miner-v2';
 const PRECACHE = [
   './',
   './index.html',
@@ -10,6 +10,8 @@ const PRECACHE = [
   './js/mine.js',
   './js/miner-client.js',
   './js/miner-worker.js',
+  './js/vendor/randomx/web-randomx.js',
+  './js/vendor/randomx/web-randomx.wasm',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

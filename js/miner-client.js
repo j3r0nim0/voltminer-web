@@ -308,7 +308,7 @@ export class MinerClient {
       this.#emit('status', {
         message: data.wasm
           ? 'RandomX Wasm ready.'
-          : 'RandomX Wasm missing — hashing is a stub until you compile web-miner/js/vendor/randomx/.',
+          : 'RandomX Wasm missing — hard-refresh (Cmd-Shift-R); the worker could not load web-randomx.js.',
       });
       return;
     }

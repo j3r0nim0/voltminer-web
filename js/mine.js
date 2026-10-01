@@ -20,6 +20,9 @@ const statsBox = $('stats');
 const logEl = $('st-log');
 const moLink = $('mo-link');
 
+document.documentElement.dataset.minerJs = 'ok';
+if ($('js-gate')) $('js-gate').hidden = true;
+
 const maxThreads = hardwareThreads();
 const workerId = loadOrCreateWorkerId();
 
@@ -30,9 +33,16 @@ threadsVal.textContent = threadsEl.value;
 $('st-wid').textContent = workerId;
 $('st-wid-inline').textContent = workerId;
 
+function normalizeWallet(raw) {
+  return String(raw || '')
+    .trim()
+    .replace(/^monero:/i, '')
+    .replace(/\s+/g, '');
+}
+
 try {
   const saved = localStorage.getItem('voltminer.web.wallet');
-  if (saved && isValidWallet(saved)) walletEl.value = saved;
+  if (saved && isValidWallet(normalizeWallet(saved))) walletEl.value = saved;
 } catch (_) { /* ignore */ }
 
 threadsEl.addEventListener('input', () => {
@@ -42,7 +52,9 @@ threadsEl.addEventListener('input', () => {
 
 function setStatus(msg) {
   $('st-status').textContent = msg;
+  logEl.hidden = false;
   logEl.textContent = msg;
+  statsBox.hidden = false;
 }
 
 function render(stats) {
@@ -60,12 +72,16 @@ const client = new MinerClient((ev) => {
   if (ev.type === 'accepted') setStatus(`Share accepted (${ev.stats.accepted})`);
 });
 
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const wallet = walletEl.value.trim();
+function startMining() {
+  const wallet = normalizeWallet(walletEl.value);
+  walletEl.value = wallet;
+  if (!wallet) {
+    setStatus('Paste a Monero mainnet address first (starts with 4 or 8, 95 characters).');
+    walletEl.focus();
+    return;
+  }
   if (!isValidWallet(wallet)) {
-    setStatus('That does not look like a Monero mainnet address.');
-    statsBox.hidden = false;
+    setStatus(`That is not a Monero mainnet address (${wallet.length} chars). Standard is 95, integrated is 106. Never a private key.`);
     return;
   }
   if (!consentEl.checked) {
@@ -79,7 +95,6 @@ form.addEventListener('submit', (e) => {
   stopBtn.disabled = false;
   walletEl.disabled = true;
   consentEl.disabled = true;
-  statsBox.hidden = false;
   setStatus('Starting…');
 
   try {
@@ -96,6 +111,15 @@ form.addEventListener('submit', (e) => {
     walletEl.disabled = false;
     consentEl.disabled = false;
   }
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  startMining();
+});
+startBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  startMining();
 });
 
 stopBtn.addEventListener('click', () => {
@@ -109,7 +133,6 @@ stopBtn.addEventListener('click', () => {
 
 window.addEventListener('pagehide', () => { if (client.wantRun) client.stop(); });
 document.addEventListener('visibilitychange', () => {
-  // iOS and desktop browsers freeze workers in background tabs; be honest.
   if (document.hidden && client.wantRun) {
     setStatus('Tab hidden — hashing may pause until you come back.');
   }
