@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web miner — VoltMiner (experimental)</title>
+  <meta name="description" content="Experimental, opt-in browser miner for VoltMiner. Mines Monero via MoneroOcean to your own wallet. Slow by design — the Android app is the real miner." />
+  <meta name="theme-color" content="#0a1226" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="https://voltminer.net/" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner</a>
+      <nav>
+        <a href="https://voltminer.net/#features">Features</a>
+        <a href="https://voltminer.net/leaderboard.html">Clan Leaderboard</a>
+        <a href="./" aria-current="page">Web miner</a>
+        <a class="btn" href="https://voltminer.net/#download">Get VoltMiner</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero" style="padding-bottom:36px;">
+    <div class="wrap">
+      <span class="pill">Experimental · Opt-in · Non-custodial</span>
+      <h1>Browser miner. <span class="volt">Not the real thing.</span></h1>
+      <p class="sub">Experiment: this page tries <strong>RandomX</strong> in a Web Worker
+        and sends shares to <strong>MoneroOcean</strong> under <em>your</em> wallet via a
+        small origin-locked VPS bridge (not Cloudflare). It is a sandbox next to the
+        Android app. Expect toy H/s. iOS will suspend it in the background.</p>
+      <div class="cta">
+        <a class="btn" href="https://voltminer.net/#download">Get the Android app</a>
+        <button class="btn ghost" type="button" data-pwa-install hidden>Install as app</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="consent" style="border-top:none; padding-top:0;">
+    <div class="wrap mine-layout">
+      <aside class="card mine-notice">
+        <h3>Before you start</h3>
+        <ul>
+          <li><strong>You start it.</strong> Nothing hashes until you press Start. Closing the tab stops it.</li>
+          <li><strong>Your wallet, your coins.</strong> The address goes to the pool as the stratum login. VoltMiner never holds XMR.</li>
+          <li><strong>Ad-blockers will fight this.</strong> uBlock Origin and some antivirus flag Wasm miners even with consent. Pause them on this page or the WebSocket never opens.</li>
+          <li><strong>Leave cores free.</strong> Default is half your threads, minus one. A frozen tab is not a faster miner.</li>
+          <li><strong>RandomX in a tab, not XMRig.</strong> Same algo family as the APK (<code>rx/0</code>), different binary: Wasm light/cache mode, no huge pages. The Android app will always win on the same machine.</li>
+          <li><strong>Needs the VPS bridge.</strong> Production is <code>wss://bridge.voltminer.net</code> on DigitalOcean. Not a Cloudflare Worker.</li>
+          <li><strong>Needs compiled Wasm.</strong> Until <code>js/vendor/randomx/web-randomx.wasm</code> is built, the worker will connect and receive jobs but will not submit shares.</li>
+        </ul>
+      </aside>
+
+      <div class="card mine-panel">
+        <form id="mine-form" autocomplete="on">
+          <label class="mine-label" for="wallet">Monero wallet</label>
+          <input id="wallet" name="wallet" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="4… or 8… mainnet address" required />
+          <p class="note" id="wallet-hint">Standard (95) or integrated (106) Monero address. Never a private key.</p>
+
+          <label class="mine-label" for="threads">Threads: <strong id="threads-val">—</strong>
+            <span class="muted" id="threads-max"></span></label>
+          <input id="threads" type="range" min="1" max="4" step="1" />
+
+          <label class="consent-row">
+            <input id="consent" type="checkbox" required />
+            <span>I understand this will use CPU on this device, that ad-blockers may need to be paused, and that I am mining to the wallet above.</span>
+          </label>
+
+          <div class="mine-actions">
+            <button class="btn" id="start" type="submit">Start mining</button>
+            <button class="btn ghost" id="stop" type="button" disabled>Stop</button>
+          </div>
+        </form>
+
+        <div class="mine-stats" id="stats" hidden>
+          <div class="stat"><span class="k">Status</span><span class="v" id="st-status">Idle</span></div>
+          <div class="stat"><span class="k">Hashrate</span><span class="v" id="st-hs">0 H/s</span></div>
+          <div class="stat"><span class="k">Threads</span><span class="v" id="st-th">0</span></div>
+          <div class="stat"><span class="k">Accepted</span><span class="v" id="st-ok">0</span></div>
+          <div class="stat"><span class="k">Hashes</span><span class="v" id="st-tot">0</span></div>
+          <div class="stat"><span class="k">Worker</span><span class="v mono" id="st-wid">—</span></div>
+        </div>
+        <p class="note" id="st-log"></p>
+        <p class="note">Verify shares on the
+          <a id="mo-link" href="https://moneroocean.stream/" target="_blank" rel="noopener">MoneroOcean dashboard</a>
+          after a few accepted shares. Worker id is <span class="mono" id="st-wid-inline">VMW-…</span>.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div>⚡ VoltMiner — open-source Monero mining. App code MIT-licensed; bundled XMRig is GPL-3.0.</div>
+      <div>
+        <a href="https://voltminer.net/">Home</a> ·
+        <a href="https://voltminer.net/leaderboard.html">Clan Leaderboard</a> ·
+        <a href="https://voltminer.net/about.html">About Us</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/pwa.js"></script>
+  <script type="module" src="js/mine.js"></script>
+</body>
+</html>

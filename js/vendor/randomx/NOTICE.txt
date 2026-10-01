@@ -1,0 +1,29 @@
+RandomX-in-the-browser is an *experiment*, not the VoltMiner product miner.
+
+The Android app uses the bundled XMRig binary (MoneroOcean fork) speaking
+TLS stratum to gulf.moneroocean.stream:20032 — RandomX native, DONATE 0%.
+
+This folder is where a compiled WebRandomX (tevador/RandomX → Wasm) build
+would live:
+
+  web-randomx.js
+  web-randomx.wasm
+
+Those files are NOT committed. They are ~tens of MB of Emscripten output
+(WebRandomX links with TOTAL_MEMORY=272MB). Build them yourself if you
+want the tab to actually hash:
+
+  git clone https://github.com/WebCryptomining/WebRandomX.git
+  cd WebRandomX && mkdir build && cd build
+  emcmake cmake -DARCH=native ..
+  make
+  cp web-randomx.js web-randomx.wasm  <this-dir>/
+
+License of RandomX / WebRandomX is BSD-3-Clause (see that repo). Do not
+hotlink a third-party wasm at runtime.
+
+Without those two files, miner-worker.js still talks to the VPS bridge
+and will receive rx/0 jobs, but it will not submit shares (no fake PoW).
+
+The hop itself is tools/web-stratum-bridge (VPS / localhost), not a
+Cloudflare Worker.
