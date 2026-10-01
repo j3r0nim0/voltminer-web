@@ -5,13 +5,16 @@
    If not, we still speak the job protocol so the UI and bridge can be
    tested; we never submit fake shares.
 
-   Paths are relative to this worker so GitHub project Pages
-   (https://<user>.github.io/<repo>/) works, not only a custom domain. */
+   Share check matches XMRig/MoneroOcean: the first 8 bytes of the hash
+   as a little-endian uint64 must be <= the job target. Comparing from
+   the high end of the 32-byte hash never hits a 4-byte MO target. */
 
 const WASM_JS = new URL('vendor/randomx/web-randomx.js', self.location).href;
 
 let modulePromise = null;
-let rx = null; // { module, hash, input, output, seed }
+let rx = null;
+let nonceBase = (Math.random() * 0x100000000) >>> 0;
+let debugOnce = false;
 
 function hexToBytes(hex) {
   const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
@@ -26,14 +29,29 @@ function bytesToHex(bytes) {
   return s;
 }
 
+/** XMRig Job::checkHash — first 8 bytes of hash as LE uint64 <= target. */
 function meetsTarget(output, target) {
-  for (let i = 1; i <= target.length && i <= output.length; i++) {
-    const o = output[output.length - i];
-    const t = target[target.length - i];
-    if (o > t) return false;
-    if (o < t) return true;
+  if (!target.length) return false;
+  let tmp = 0;
+  const n = Math.min(4, target.length);
+  for (let i = 0; i < n; i++) tmp |= target[i] << (8 * i);
+  tmp >>>= 0;
+  if (tmp === 0) {
+    if (target.length >= 8) {
+      let h = 0n;
+      let t = 0n;
+      for (let i = 0; i < 8; i++) {
+        h |= BigInt(output[i]) << BigInt(8 * i);
+        t |= BigInt(target[i]) << BigInt(8 * i);
+      }
+      return h <= t;
+    }
+    return false;
   }
-  return true;
+  const t64 = 0xFFFFFFFFFFFFFFFFn / (0xFFFFFFFFn / BigInt(tmp));
+  let h = 0n;
+  for (let i = 0; i < 8; i++) h |= BigInt(output[i]) << BigInt(8 * i);
+  return h <= t64;
 }
 
 function loadWasm() {
@@ -43,7 +61,6 @@ function loadWasm() {
       const res = await fetch(WASM_JS, { cache: 'no-store' });
       if (!res.ok) throw new Error('no wasm js ' + res.status);
       const src = await res.text();
-      // Emscripten MODULARIZE=1 typically assigns Module factory via export or global.
       const factory = await new Promise((resolve, reject) => {
         const prev = self.Module;
         try {
@@ -81,13 +98,13 @@ function loadWasm() {
 
 let job = null;
 let running = false;
-let targetBytes = new Uint8Array(8).fill(0xff);
+let targetBytes = new Uint8Array(4).fill(0xff);
 
 function setJob(next) {
   job = next;
   if (!job || !job.blob) return;
   const t = hexToBytes(job.target);
-  targetBytes = t.length ? t : new Uint8Array(8).fill(0xff);
+  targetBytes = t.length ? t : new Uint8Array(4).fill(0xff);
 }
 
 function hashOnce() {
@@ -100,7 +117,8 @@ function hashOnce() {
   rx.seed.fill(0);
   if (seed.length) rx.seed.set(seed.subarray(0, Math.min(32, seed.length)));
 
-  const nonce = (Math.random() * 0x100000000) >>> 0;
+  nonceBase = (nonceBase + 1) >>> 0;
+  const nonce = nonceBase;
   rx.input[39] = (nonce >>> 24) & 0xff;
   rx.input[40] = (nonce >>> 16) & 0xff;
   rx.input[41] = (nonce >>> 8) & 0xff;
@@ -112,13 +130,23 @@ function hashOnce() {
   const nonceHex = bytesToHex(rx.input.subarray(39, 43));
   const result = bytesToHex(rx.output.subarray(0, 32));
   const ok = meetsTarget(rx.output.subarray(0, 32), targetBytes);
+  if (!debugOnce) {
+    debugOnce = true;
+    postMessage({
+      type: 'debug',
+      nonceHex,
+      result,
+      target: job.target,
+      ok,
+      h64: bytesToHex(rx.output.subarray(0, 8)),
+    });
+  }
   return { nonceHex, result, ok };
 }
 
 function loop() {
   if (!running || !job) return;
   if (!rx) {
-    // No wasm: don't burn CPU pretending, don't submit.
     setTimeout(loop, 1500);
     return;
   }

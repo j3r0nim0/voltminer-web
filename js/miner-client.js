@@ -111,7 +111,9 @@ export class MinerClient {
     this.submitIds.clear();
     this.sessionId = null;
     this.wallet = wallet.trim();
-    this.password = password || 'x';
+    // MoneroOcean: "name,d=N" sets start difficulty. Default ~320k is hours at 15 H/s.
+    const rawPass = password || 'x';
+    this.password = /(?:^|,)d=\d+/i.test(rawPass) ? rawPass : `${rawPass},d=100`;
     this.threads = Math.max(1, Math.min(hardwareThreads(), threads | 0 || 1));
     this.bridgeUrl = url;
     this.#spawnWorkers(this.threads);
@@ -303,6 +305,10 @@ export class MinerClient {
   #onWorkerMsg(_wrk, data) {
     if (!this.wantRun) return;
     if (!data || typeof data !== 'object') return;
+    if (data.type === 'debug') {
+      this.#emit('status', { message: `hash sample ${String(data.result || '').slice(0, 16)}… target ${data.target} ok=${data.ok}` });
+      return;
+    }
     if (data.type === 'ready') {
       this.wasmReady = !!data.wasm;
       this.#emit('status', {
