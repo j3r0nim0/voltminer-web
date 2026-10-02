@@ -54,11 +54,19 @@ threadsEl.addEventListener('input', () => {
   if (client.wantRun) client.setThreads(Number(threadsEl.value));
 });
 
+let filling = false;
+let lastFillPct = -1;
+
 function setStatus(msg) {
   $('st-status').textContent = msg;
   logEl.hidden = false;
   logEl.textContent = msg;
   statsBox.hidden = false;
+}
+
+function setDataset(label) {
+  const el = $('st-ds');
+  if (el) el.textContent = label;
 }
 
 function logLine(kind, msg) {
@@ -91,9 +99,30 @@ function render(stats) {
 
 const client = new MinerClient((ev) => {
   if (ev.stats) render(ev.stats);
+  if (ev.type === 'ds') {
+    filling = (ev.pct | 0) < 100;
+    lastFillPct = ev.pct | 0;
+    const line = `Dataset fill ${lastFillPct}%`;
+    setDataset(`${lastFillPct}%`);
+    setStatus(line);
+    logLine('hash', line);
+  }
   if (ev.type === 'status') {
-    setStatus(ev.message);
-    logLine('', ev.message);
+    if (/fast\/full dataset ready/i.test(ev.message || '')) {
+      filling = false;
+      setDataset('100% full');
+    }
+    if (/light\/cache ready/i.test(ev.message || '')) setDataset('light');
+    if (/Dataset alloc failed|fill aborted/i.test(ev.message || '')) {
+      filling = false;
+      setDataset('light');
+    }
+    if (filling && /^Job /i.test(ev.message || '')) {
+      logLine('', ev.message);
+    } else {
+      setStatus(ev.message);
+      logLine('', ev.message);
+    }
   }
   if (ev.type === 'error') {
     setStatus(ev.message);
@@ -101,8 +130,8 @@ const client = new MinerClient((ev) => {
   }
   if (ev.type === 'job') {
     const line = `job ${ev.jobId || ''} algo=${ev.algo || 'rx/0'}`;
-    setStatus(`Job ${ev.jobId || ''} (${ev.algo || 'rx/0'})`);
     logLine('job', line);
+    if (!filling) setStatus(`Job ${ev.jobId || ''} (${ev.algo || 'rx/0'})`);
   }
   if (ev.type === 'tick') {
     logLine('hash', `${(ev.hashrate || 0).toFixed(1)} H/s  +${ev.n || 0} hashes  total=${ev.total || 0}  job=${ev.jobId || '—'}`);

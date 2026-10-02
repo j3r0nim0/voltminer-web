@@ -354,7 +354,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=18', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=19', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       this.#emit('error', {
@@ -391,7 +391,7 @@ export class MinerClient {
       return;
     }
     if (data.type === 'ds') {
-      this.#emit('status', { message: `Dataset fill ${data.pct}%` });
+      this.#emit('ds', { pct: data.pct });
       return;
     }
     if (data.type === 'dataset') {
