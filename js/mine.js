@@ -18,6 +18,11 @@ const stopBtn = $('stop');
 const statsBox = $('stats');
 const logEl = $('st-log');
 const moLink = $('mo-link');
+const hashLogEl = $('hash-log');
+const hashLogWrap = $('hash-log-wrap');
+const hashLogClear = $('hash-log-clear');
+const MAX_LOG = 200;
+const logLines = [];
 
 document.documentElement.dataset.minerJs = 'ok';
 if ($('js-gate')) $('js-gate').hidden = true;
@@ -56,6 +61,26 @@ function setStatus(msg) {
   statsBox.hidden = false;
 }
 
+function logLine(kind, msg) {
+  if (!hashLogEl) return;
+  const t = new Date().toISOString().slice(11, 23);
+  logLines.push({ kind, text: `${t}  ${msg}` });
+  if (logLines.length > MAX_LOG) logLines.splice(0, logLines.length - MAX_LOG);
+  hashLogWrap.hidden = false;
+  hashLogEl.innerHTML = logLines.map((l) => {
+    const cls = l.kind ? ` class="log-${l.kind}"` : '';
+    return `<span${cls}>${escapeHtml(l.text)}</span>`;
+  }).join('\n');
+  hashLogEl.scrollTop = hashLogEl.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function render(stats) {
   statsBox.hidden = false;
   $('st-hs').textContent = `${stats.hashrate.toFixed(1)} H/s`;
@@ -66,10 +91,37 @@ function render(stats) {
 
 const client = new MinerClient((ev) => {
   if (ev.stats) render(ev.stats);
-  if (ev.type === 'status' || ev.type === 'error') setStatus(ev.message);
-  if (ev.type === 'job') setStatus(`Job ${ev.jobId || ''} (${ev.algo || 'rx/0'})`);
-  if (ev.type === 'accepted') setStatus(`Share accepted (${ev.stats.accepted})`);
+  if (ev.type === 'status') {
+    setStatus(ev.message);
+    logLine('', ev.message);
+  }
+  if (ev.type === 'error') {
+    setStatus(ev.message);
+    logLine('err', ev.message);
+  }
+  if (ev.type === 'job') {
+    const line = `job ${ev.jobId || ''} algo=${ev.algo || 'rx/0'}`;
+    setStatus(`Job ${ev.jobId || ''} (${ev.algo || 'rx/0'})`);
+    logLine('job', line);
+  }
+  if (ev.type === 'tick') {
+    logLine('hash', `${(ev.hashrate || 0).toFixed(1)} H/s  +${ev.n || 0} hashes  total=${ev.total || 0}  job=${ev.jobId || '—'}`);
+  }
+  if (ev.type === 'submit') {
+    logLine('job', `submit job=${ev.jobId || ''} nonce=${ev.nonce || ''} result=${String(ev.result || '').slice(0, 16)}…`);
+  }
+  if (ev.type === 'accepted') {
+    setStatus(`Share accepted (${ev.stats.accepted})`);
+    logLine('ok', `accepted  total=${ev.stats.accepted}`);
+  }
 });
+
+if (hashLogClear) {
+  hashLogClear.addEventListener('click', () => {
+    logLines.length = 0;
+    hashLogEl.textContent = '';
+  });
+}
 
 function startMining() {
   const wallet = normalizeWallet(walletEl.value);
@@ -102,6 +154,7 @@ function startMining() {
   walletEl.disabled = true;
   consentEl.disabled = true;
   setStatus('Starting…');
+  logLine('', 'start');
 
   try {
     client.start({
@@ -135,6 +188,7 @@ stopBtn.addEventListener('click', () => {
   walletEl.disabled = false;
   consentEl.disabled = false;
   setStatus('Stopped.');
+  logLine('', 'stop');
 });
 
 window.addEventListener('pagehide', () => { if (client.wantRun) client.stop(); });

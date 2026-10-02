@@ -129,8 +129,17 @@ export class MinerClient {
     }, 20000);
     this.statsTimer = setInterval(() => {
       this.hashrate = this.windowHashes / 2;
+      const n = this.windowHashes;
       this.windowHashes = 0;
       this.#emit('stats', {});
+      if (this.wantRun && (n > 0 || this.hashrate > 0)) {
+        this.#emit('tick', {
+          n,
+          hashrate: this.hashrate,
+          total: this.totalHashes,
+          jobId: this.job?.job_id || '',
+        });
+      }
     }, 2000);
     this.#emit('status', { message: 'Connecting to bridge…' });
   }
@@ -348,6 +357,11 @@ export class MinerClient {
       this.windowHashes += 1;
       const id = this.#nextId();
       this.submitIds.set(id, true);
+      this.#emit('submit', {
+        jobId: data.job_id,
+        nonce: data.nonce,
+        result: data.result,
+      });
       this.#send({
         id,
         jsonrpc: '2.0',

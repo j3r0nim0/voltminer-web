@@ -87,6 +87,14 @@
         </div>
         <p class="note" id="js-gate">If Start does nothing, this page’s JavaScript did not load — pause the ad-blocker on this tab and hard-refresh (Cmd-Shift-R).</p>
         <p class="note" id="st-log"></p>
+        <div class="hash-log-wrap" id="hash-log-wrap" hidden>
+          <div class="hash-log-head">
+            <strong>Hash log</strong>
+            <span class="muted">newest at the bottom · last 200 lines</span>
+            <button class="btn ghost" type="button" id="hash-log-clear">Clear</button>
+          </div>
+          <pre class="hash-log" id="hash-log" aria-live="polite"></pre>
+        </div>
         <p class="note">Verify shares on the
           <a id="mo-link" href="https://moneroocean.stream/" target="_blank" rel="noopener">MoneroOcean dashboard</a>
           after a few accepted shares. Worker id is <span class="mono" id="st-wid-inline">VMW-…</span>.</p>
@@ -105,7 +113,7 @@
     </div>
   </footer>
 
-  <script src="js/pwa.js?v=10"></script>
-  <script type="module" src="js/mine.js?v=10"></script>
+  <script src="js/pwa.js?v=11"></script>
+  <script type="module" src="js/mine.js?v=11"></script>
 </body>
 </html>
