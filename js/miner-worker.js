@@ -499,9 +499,9 @@ function loop() {
   const t0 = performance.now();
   let n = 0;
   let solved = null;
-  const batch = dsPhase === 'done' ? Math.max(32, cpuThreads * 16) : 4;
+  const batch = dsPhase === 'done' ? Math.max(64, cpuThreads * 32) : 4;
   try {
-    while (performance.now() - t0 < 400) {
+    while (performance.now() - t0 < 800) {
       const r = mineBatch(batch);
       n += r.n;
       if (r.solved) { solved = r.solved; break; }

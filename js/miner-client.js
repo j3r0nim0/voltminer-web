@@ -38,7 +38,7 @@ export function canShareDataset() {
 export function defaultThreadCount() {
   if (!canShareDataset()) return 1;
   const n = hardwareThreads();
-  return Math.max(1, Math.min(4, Math.floor(n / 2) || 1));
+  return Math.max(1, Math.min(8, Math.max(1, n - 2)));
 }
 
 export function loadOrCreateWorkerId() {
@@ -129,7 +129,7 @@ export class MinerClient {
     this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+30000`;
     this.password = password || 'x';
     this.threads = canShareDataset()
-      ? Math.max(1, Math.min(4, Number(threads) || 1))
+      ? Math.max(1, Math.min(8, Number(threads) || 1))
       : 1;
     this.bridgeUrl = url;
     this.lastWorkerAt = Date.now();
@@ -176,7 +176,7 @@ export class MinerClient {
   }
 
   setThreads(n) {
-    this.threads = canShareDataset() ? Math.max(1, Math.min(4, Number(n) || 1)) : 1;
+    this.threads = canShareDataset() ? Math.max(1, Math.min(8, Number(n) || 1)) : 1;
     for (const wrk of this.workers) {
       try { wrk.postMessage({ type: 'threads', n: this.threads }); } catch { /* ignore */ }
     }
@@ -371,7 +371,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=33', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=34', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
