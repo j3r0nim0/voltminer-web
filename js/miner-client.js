@@ -481,7 +481,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=46', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=47', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
@@ -573,6 +573,8 @@ export class MinerClient {
         jobId: data.job_id,
         nonce: data.nonce,
         result: data.result,
+        resultLen: String(data.result || '').length,
+        blobNonce: String(this.job.blob || '').slice(78, 86),
         target: this.job.target || '',
         jobDiff,
         hashDiff,
