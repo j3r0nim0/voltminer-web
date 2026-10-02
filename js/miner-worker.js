@@ -5,7 +5,11 @@
    either restore it from OPFS (keyed by seed_hash) or fill it in C++
    chunks. A seed change drops the old file and rebuilds. */
 
-const WASM_JS = new URL('vendor/randomx/web-randomx.js', self.location).href;
+const USE_MT = typeof SharedArrayBuffer === 'function';
+const WASM_JS = new URL(
+  USE_MT ? 'vendor/randomx/web-randomx-mt.js' : 'vendor/randomx/web-randomx.js',
+  self.location,
+).href;
 const DS_CHUNK = 262144; // ~16 MB of dataset items per compute step
 const IO_CHUNK = 16 * 1024 * 1024; // 16 MB copy to/from OPFS
 const OPFS_BUDGET_MS = 2500;
@@ -20,6 +24,7 @@ let lastPct = -1;
 let hashing = true;
 let dsGen = 0;
 let cachedSeedHex = '';
+let cpuThreads = 1;
 
 function hexToBytes(hex) {
   const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
@@ -53,7 +58,10 @@ function loadWasm() {
   modulePromise = (async () => {
     try {
       const res = await fetch(WASM_JS, { cache: 'no-store' });
-      if (!res.ok) throw new Error('no wasm js ' + res.status);
+      if (!res.ok) {
+        if (USE_MT) throw new Error('pthread wasm missing (' + res.status + ')');
+        throw new Error('no wasm js ' + res.status);
+      }
       const src = await res.text();
       const factory = await new Promise((resolve, reject) => {
         const prev = self.Module;
@@ -70,9 +78,10 @@ function loadWasm() {
       });
       const module = await factory({
         locateFile(path) {
-          const name = path.endsWith('.wasm') ? 'web-randomx.wasm' : path;
+          const name = path.split('/').pop();
           return new URL('vendor/randomx/' + name, self.location).href;
         },
+        mainScriptUrlOrBlob: WASM_JS,
       });
       if (typeof module._randomx_mine !== 'function') {
         throw new Error('_randomx_mine not exported');
@@ -80,6 +89,7 @@ function loadWasm() {
       rx = {
         module,
         mineFn: module._randomx_mine,
+        setThreads: module._randomx_set_threads,
         isFull: module._randomx_is_full_mem,
         dsBegin: module._randomx_dataset_begin,
         dsStep: module._randomx_dataset_step,
@@ -96,6 +106,13 @@ function loadWasm() {
         foundPtr: module._malloc(4),
       };
       bindHeap();
+      if (typeof rx.setThreads === 'function') rx.setThreads(cpuThreads);
+      postMessage({
+        type: 'status',
+        message: USE_MT
+          ? `RandomX pthread Wasm loaded (${cpuThreads} C++ threads, one 2 GB dataset).`
+          : 'RandomX sequential Wasm loaded (this origin cannot share the dataset).',
+      });
       return true;
     } catch (err) {
       rx = null;
@@ -481,6 +498,11 @@ function loop() {
 
 onmessage = function (e) {
   const data = e.data || {};
+  if (data.type === 'threads') {
+    cpuThreads = Math.max(1, Math.min(8, data.n | 0 || 1));
+    if (rx && typeof rx.setThreads === 'function') rx.setThreads(cpuThreads);
+    postMessage({ type: 'status', message: `C++ threads set to ${cpuThreads} (shared dataset).` });
+  }
   if (data.type === 'job') {
     setJob(data.job);
     if (!running) {

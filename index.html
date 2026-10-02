@@ -48,7 +48,7 @@
           <li><strong>Your wallet, your coins.</strong> The address goes to the pool as the stratum login. VoltMiner never holds XMR.</li>
           <li><strong>Ad-blockers will fight this.</strong> uBlock Origin and some antivirus flag Wasm miners even with consent. Pause them on this page or the WebSocket never opens.</li>
           <li><strong>Chrome, not Safari.</strong> Fast mode grows Wasm toward ~3 GB. Safari often cannot. Use a 16 GB PC and close other tabs.</li>
-          <li><strong>Chunked dataset + OPFS cache.</strong> Light/cache hashes immediately. Then we fill the ~2 GB dataset (~6 min once per <code>seed_hash</code>, ~2.8 days). Next Start restores it from this browser’s disk. A seed change drops the old file. Safari / low RAM stay in light mode.</li>
+          <li><strong>One 2 GB dataset, extra cores on this origin.</strong> <code>web.voltminer.net</code> is cross-origin isolated, so C++ pthreads share the dataset (phone math: +~2 MB scratchpad each, not +2 GB). GitHub Pages stays 1 thread. Still interpreted Wasm — a phone XMRig core will beat a tab core.</li>
           <li><strong>Start-diff 30 000.</strong> Same <code>wallet+30000</code> as the Android app so we do not spray 10k shares at the pool. Jobs still rotate every few seconds; this only makes shares rarer (~14 min at 35 H/s).</li>
           <li><strong>Leave the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can IP-ban the bridge for 10 minutes.</li>
           <li><strong>RandomX in a tab, not XMRig.</strong> Same algo family as the APK (<code>rx/0</code>), no huge pages, no JIT. The Android app will always win on the same machine.</li>
@@ -64,8 +64,8 @@
           <p class="note" id="wallet-hint">Standard (95) or integrated (106) Monero address. Never a private key.</p>
 
           <label class="mine-label" for="threads">Threads: <strong id="threads-val">1</strong>
-            <span class="muted" id="threads-max">(one Wasm worker — interpreted RandomX)</span></label>
-          <input id="threads" type="range" min="1" max="1" step="1" value="1" disabled />
+            <span class="muted" id="threads-max">(detecting…)</span></label>
+          <input id="threads" type="range" min="1" max="4" step="1" value="1" />
 
           <label class="consent-row" id="consent-row">
             <input id="consent-ok" name="consent" type="checkbox" />
@@ -115,7 +115,7 @@
     </div>
   </footer>
 
-  <script src="js/pwa.js?v=23"></script>
-  <script type="module" src="js/mine.js?v=23"></script>
+  <script src="js/pwa.js?v=24"></script>
+  <script type="module" src="js/mine.js?v=24"></script>
 </body>
 </html>

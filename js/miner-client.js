@@ -31,9 +31,14 @@ export function hardwareThreads() {
   return Math.max(1, Math.min(32, n));
 }
 
+export function canShareDataset() {
+  return typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
+}
+
 export function defaultThreadCount() {
-  // Fast-mode dataset is ~2 GB and is not shared across Workers.
-  return 1;
+  if (!canShareDataset()) return 1;
+  const n = hardwareThreads();
+  return Math.max(1, Math.min(4, Math.floor(n / 2) || 1));
 }
 
 export function loadOrCreateWorkerId() {
@@ -89,7 +94,7 @@ export class MinerClient {
     return {
       connected: this.connected,
       running: this.wantRun,
-      threads: this.workers.length,
+      threads: this.threads,
       hashrate: this.hashrate,
       totalHashes: this.totalHashes,
       accepted: this.accepted,
@@ -123,11 +128,12 @@ export class MinerClient {
     // MO honors wallet+N. 10k was spraying shares at the droplet IP.
     this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+30000`;
     this.password = password || 'x';
-    // One 2 GB RandomX dataset per tab. Extra workers each allocate another 2 GB.
-    this.threads = 1;
+    this.threads = canShareDataset()
+      ? Math.max(1, Math.min(4, Number(threads) || 1))
+      : 1;
     this.bridgeUrl = url;
     this.lastWorkerAt = Date.now();
-    this.#spawnWorkers(this.threads);
+    this.#spawnWorkers(1);
     this.#connect();
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = setInterval(() => {
@@ -169,11 +175,11 @@ export class MinerClient {
     this.#emit('status', { message: 'Connecting to bridge…' });
   }
 
-  setThreads(_n) {
-    this.threads = 1;
-    while (this.workers.length > 1) this.#removeWorker();
-    if (this.workers.length === 0) this.#addWorker();
-    this.#broadcastJob();
+  setThreads(n) {
+    this.threads = canShareDataset() ? Math.max(1, Math.min(4, Number(n) || 1)) : 1;
+    for (const wrk of this.workers) {
+      try { wrk.postMessage({ type: 'threads', n: this.threads }); } catch { /* ignore */ }
+    }
     this.#emit('stats', {});
   }
 
@@ -365,7 +371,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=23', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=24', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       this.#emit('error', {
@@ -376,6 +382,7 @@ export class MinerClient {
       this.#emit('error', { message: 'Hash worker message error.' });
     };
     this.workers.push(wrk);
+    try { wrk.postMessage({ type: 'threads', n: this.threads }); } catch { /* ignore */ }
     if (this.job) wrk.postMessage({ type: 'job', job: this.job });
   }
 

@@ -2,6 +2,8 @@ import {
   MinerClient,
   isValidWallet,
   defaultThreadCount,
+  canShareDataset,
+  hardwareThreads,
   loadOrCreateWorkerId,
 } from './miner-client.js';
 
@@ -29,11 +31,21 @@ if ($('js-gate')) $('js-gate').hidden = true;
 
 const workerId = loadOrCreateWorkerId();
 
-threadsEl.max = '1';
-threadsEl.value = '1';
-threadsEl.disabled = true;
-threadsMax.textContent = '(one Wasm worker — interpreted RandomX)';
-threadsVal.textContent = '1';
+if (canShareDataset()) {
+  const max = Math.max(1, Math.min(4, hardwareThreads()));
+  const def = defaultThreadCount();
+  threadsEl.max = String(max);
+  threadsEl.value = String(def);
+  threadsEl.disabled = false;
+  threadsMax.textContent = `(${max} C++ threads, one 2 GB dataset — web.voltminer.net)`;
+  threadsVal.textContent = String(def);
+} else {
+  threadsEl.max = '1';
+  threadsEl.value = '1';
+  threadsEl.disabled = true;
+  threadsMax.textContent = '(one Wasm worker — this origin cannot share the dataset)';
+  threadsVal.textContent = '1';
+}
 $('st-wid').textContent = workerId;
 $('st-wid-inline').textContent = workerId;
 
