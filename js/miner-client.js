@@ -113,6 +113,7 @@ export class MinerClient {
     this.accepted = 0;
     this.rejected = 0;
     this.windowHashes = 0;
+    this.hashSamples = [];
     this.hashrate = 0;
     this.statsAt = 0;
     this.wasmReady = false;
@@ -151,6 +152,7 @@ export class MinerClient {
     this.wantRun = true;
     this.totalHashes = 0;
     this.windowHashes = 0;
+    this.hashSamples = [];
     this.hashrate = 0;
     this.statsAt = Date.now();
     this.accepted = 0;
@@ -194,11 +196,19 @@ export class MinerClient {
     this.statsAt = Date.now();
     this.statsTimer = setInterval(() => {
       const now = Date.now();
-      const dt = Math.max(0.001, (now - this.statsAt) / 1000);
-      this.statsAt = now;
       const n = this.windowHashes;
       this.windowHashes = 0;
-      this.hashrate = n / dt;
+      if (n) this.hashSamples.push({ t: now, n });
+      const cutoff = now - 10000;
+      while (this.hashSamples.length && this.hashSamples[0].t < cutoff) this.hashSamples.shift();
+      let total = 0;
+      for (const s of this.hashSamples) total += s.n;
+      const dt10 = this.hashSamples.length
+        ? Math.max(1, (now - this.hashSamples[0].t) / 1000)
+        : 10;
+      this.hashrate = total / dt10;
+      const dt = Math.max(0.001, (now - this.statsAt) / 1000);
+      this.statsAt = now;
       this.#emit('stats', {});
       if (this.wantRun && n > 0) {
         this.#emit('tick', {
@@ -207,6 +217,7 @@ export class MinerClient {
           total: this.totalHashes,
           jobId: this.job?.job_id || '',
           dt,
+          window: dt10,
         });
       }
     }, 2000);
@@ -432,7 +443,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=42', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=43', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
