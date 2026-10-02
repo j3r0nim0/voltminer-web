@@ -74,6 +74,8 @@ export class MinerClient {
     this.hashrate = 0;
     this.wasmReady = false;
     this.pingTimer = null;
+    this.watchdogTimer = null;
+    this.lastWorkerAt = 0;
   }
 
   #emit(type, detail) {
@@ -117,8 +119,19 @@ export class MinerClient {
     // One 2 GB RandomX dataset per tab. Extra workers each allocate another 2 GB.
     this.threads = 1;
     this.bridgeUrl = url;
+    this.lastWorkerAt = Date.now();
     this.#spawnWorkers(this.threads);
     this.#connect();
+    if (this.watchdogTimer) clearInterval(this.watchdogTimer);
+    this.watchdogTimer = setInterval(() => {
+      if (!this.wantRun) return;
+      const silent = Date.now() - this.lastWorkerAt;
+      if (silent > 20000 && this.job) {
+        this.#emit('status', {
+          message: `Hash worker silent ${Math.round(silent / 1000)}s — dataset still building, or the tab ran out of RAM (need 16 GB).`,
+        });
+      }
+    }, 15000);
     this.pingTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         try { this.ws.send('ping'); } catch { /* ignore */ }
@@ -126,7 +139,7 @@ export class MinerClient {
           this.#send({ id: this.#nextId(), jsonrpc: '2.0', method: 'keepalived', params: { id: this.sessionId } });
         }
       }
-    }, 20000);
+    }, 10000);
     this.statsTimer = setInterval(() => {
       this.hashrate = this.windowHashes / 2;
       const n = this.windowHashes;
@@ -159,6 +172,7 @@ export class MinerClient {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.statsTimer) { clearInterval(this.statsTimer); this.statsTimer = null; }
     if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+    if (this.watchdogTimer) { clearInterval(this.watchdogTimer); this.watchdogTimer = null; }
     if (this.ws) {
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
@@ -222,13 +236,14 @@ export class MinerClient {
     ws.onerror = () => {
       if (this.ws !== ws) return;
       this.connected = false;
-      this.#emit('error', { message: 'WebSocket error (is the VPS bridge running? ad-blockers also kill this).' });
+      this.#emit('error', { message: 'WebSocket error (tab OOM, ad-blocker, or proxy idle). Close code follows.' });
     };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       if (this.ws !== ws) return;
       this.connected = false;
       this.job = null;
-      this.#emit('status', { message: 'Disconnected from bridge.' });
+      const why = `Disconnected from bridge. code=${ev.code} clean=${ev.wasClean}${ev.reason ? ` reason=${ev.reason}` : ''}`;
+      this.#emit('status', { message: why });
       this.#scheduleReconnect();
     };
   }
@@ -305,6 +320,14 @@ export class MinerClient {
   #addWorker() {
     const wrk = new Worker(new URL('./miner-worker.js', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
+    wrk.onerror = (ev) => {
+      this.#emit('error', {
+        message: `Hash worker crashed: ${ev.message || 'unknown'} (often a 2 GB dataset OOM — need 16 GB RAM, close other tabs).`,
+      });
+    };
+    wrk.onmessageerror = () => {
+      this.#emit('error', { message: 'Hash worker message error.' });
+    };
     this.workers.push(wrk);
     if (this.job) wrk.postMessage({ type: 'job', job: this.job });
   }
@@ -322,6 +345,7 @@ export class MinerClient {
   #onWorkerMsg(_wrk, data) {
     if (!this.wantRun) return;
     if (!data || typeof data !== 'object') return;
+    this.lastWorkerAt = Date.now();
     if (data.type === 'debug') {
       this.#emit('status', { message: `hash sample ${String(data.result || '').slice(0, 16)}… target ${data.target} ok=${data.ok} full=${data.full}` });
       return;
