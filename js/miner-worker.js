@@ -549,12 +549,13 @@ onmessage = function (e) {
     }
   }
   if (data.type === 'pause') {
-    hashing = false;
+    /* Keep hashing the last job so a pool drop does not hide Wasm OOB.
+       Submits are already gated on an open socket + matching job_id. */
     postMessage({
       type: 'status',
       message: dsPhase === 'done'
-        ? 'Hashing paused. Dataset kept in this tab.'
-        : 'Hashing paused (dataset fill continues if in progress).',
+        ? 'Pool disconnected. Still hashing last job (dataset kept).'
+        : 'Pool disconnected (dataset fill continues if in progress).',
     });
   }
   if (data.type === 'resume') {
