@@ -357,8 +357,8 @@ export class MinerClient {
     if (data.type === 'dataset') {
       this.#emit('status', {
         message: data.full
-          ? `RandomX fast mode ready (${(data.ms / 1000).toFixed(1)}s dataset). ~2 GB in this tab.`
-          : `RandomX fell back to light/cache mode (${(data.ms / 1000).toFixed(1)}s). Need ~3 GB free RAM for fast mode.`,
+          ? `RandomX fast mode ready (${(data.ms / 1000).toFixed(1)}s).`
+          : `RandomX light/cache ready (${(data.ms / 1000).toFixed(1)}s). Interpreted Wasm — phone XMRig will beat this.`,
       });
       return;
     }

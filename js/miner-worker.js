@@ -150,9 +150,9 @@ function loop() {
     return;
   }
   if (!datasetReady) {
-    postMessage({ type: 'status', message: 'Building RandomX dataset (~2 GB). First hash can take 1–3 minutes. Do not close the tab.' });
+    postMessage({ type: 'status', message: 'Init RandomX light/cache (~272 MB). First hash should be seconds, not minutes.' });
     const tInit = performance.now();
-    mineBatch(1);
+    const first = mineBatch(1);
     bindHeap();
     const full = rx.isFull ? !!rx.isFull() : false;
     datasetReady = true;
@@ -160,6 +160,7 @@ function loop() {
       type: 'dataset',
       full,
       ms: Math.round(performance.now() - tInit),
+      n: first.n,
     });
     if (running) setTimeout(loop, 0);
     return;
