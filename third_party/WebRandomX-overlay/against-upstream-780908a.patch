@@ -1,8 +1,8 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 5d94015..d7e829b 100644
+index 5d94015..a3c8e92 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -1,191 +1,200 @@
+@@ -1,191 +1,209 @@
 -# Copyright (c) 2019, The Monero Project
 -# 
 -# All rights reserved.
@@ -333,6 +333,15 @@ index 5d94015..d7e829b 100644
 +
 +add_library(randomx ${randomx_sources})
 +
++# Threaded variant. In a --shared-memory wasm link EVERY object must declare the
++# "atomics" target feature, which -pthread implies. The plain `randomx` library
++# above is also linked into single-threaded targets, so it must not carry it.
++add_library(randomx-mt ${randomx_sources})
++set_property(TARGET randomx-mt PROPERTY POSITION_INDEPENDENT_CODE ON)
++set_property(TARGET randomx-mt PROPERTY CXX_STANDARD 11)
++set_property(TARGET randomx-mt PROPERTY CXX_STANDARD_REQUIRED ON)
++target_compile_options(randomx-mt PRIVATE -O3 -pthread -msimd128)
++
 +if(TARGET generate-asm)
 +  add_dependencies(randomx generate-asm)
 +endif()
@@ -368,7 +377,7 @@ index 5d94015..d7e829b 100644
 +add_executable(web-randomx-mt
 +  src/cpp/web_randomx.cpp)
 +target_link_libraries(web-randomx-mt
-+  PRIVATE randomx)
++  PRIVATE randomx-mt)
 +set_property(TARGET web-randomx-mt PROPERTY POSITION_INDEPENDENT_CODE ON)
 +set_property(TARGET web-randomx-mt PROPERTY CXX_STANDARD 11)
 +set_target_properties(web-randomx-mt PROPERTIES COMPILE_FLAGS "-O3 -pthread -msimd128 -ffast-math")
@@ -394,6 +403,53 @@ index 5d94015..d7e829b 100644
 +  set_property(TARGET web-randomx-benchmark PROPERTY CXX_STANDARD 11)
 +  set_target_properties(web-randomx-benchmark PROPERTIES LINK_FLAGS "-os -s WASM=1 -s MAXIMUM_MEMORY=4GB -s ALLOW_MEMORY_GROWTH=1 -msimd128")
 +endif()
+diff --git a/src/cpp/softfloat.cpp b/src/cpp/softfloat.cpp
+index 9970e58..88b1884 100644
+--- a/src/cpp/softfloat.cpp
++++ b/src/cpp/softfloat.cpp
+@@ -38,9 +38,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ #include "softfloat.hpp"
+ 
+-uint_fast8_t globalDetectTininess = tininess_afterRounding;
++/* Both are per-thread so that concurrent VMs cannot clobber each other's
++   floating-point rounding mode (CFROUND writes globalRoundingMode, and
++   intrin_wasm.h reads it to pick the fast wasm SIMD path). */
++__thread uint_fast8_t globalDetectTininess = tininess_afterRounding;
+ 
+-uint_fast8_t globalRoundingMode = round_min;
++__thread uint_fast8_t globalRoundingMode = round_min;
+ 
+ enum {
+   flag_inexact = 1,
+diff --git a/src/cpp/softfloat.hpp b/src/cpp/softfloat.hpp
+index 35f969c..db228ee 100644
+--- a/src/cpp/softfloat.hpp
++++ b/src/cpp/softfloat.hpp
+@@ -44,7 +44,10 @@ enum {
+   tininess_beforeRounding = 0,
+   tininess_afterRounding = 1
+ };
+-extern uint_fast8_t globalDetectTininess;
++/* Thread-local: in a pthread build each hashing thread keeps its own
++   rounding mode. A shared global is clobbered by the CFROUND instruction of
++   a concurrent VM and silently produces wrong RandomX hashes. */
++extern __thread uint_fast8_t globalDetectTininess;
+ 
+ enum {
+   round_near_even = 0,  // round to nearest, with ties to even
+@@ -55,7 +58,10 @@ enum {
+       4,  // round to nearest, with ties to maximum magnitude (away from zero)
+   round_odd = 5  // round to odd (jamming)
+ };
+-extern uint_fast8_t globalRoundingMode;
++/* Thread-local: see globalDetectTininess above. rx_*_vec_f128 in
++   intrin_wasm.h selects between the wasm SIMD fast path and the softfloat
++   path based on this value, so a cross-thread race corrupts every hash. */
++extern __thread uint_fast8_t globalRoundingMode;
+ 
+ // For faster memory accessing
+ typedef union suf64 {
 diff --git a/src/cpp/vm_interpreted.cpp b/src/cpp/vm_interpreted.cpp
 index 5538490..805d2eb 100644
 --- a/src/cpp/vm_interpreted.cpp

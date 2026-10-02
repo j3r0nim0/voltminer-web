@@ -137,6 +137,15 @@ set(RANDOMX_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src" CACHE STRING "WebRandomX I
 
 add_library(randomx ${randomx_sources})
 
+# Threaded variant. In a --shared-memory wasm link EVERY object must declare the
+# "atomics" target feature, which -pthread implies. The plain `randomx` library
+# above is also linked into single-threaded targets, so it must not carry it.
+add_library(randomx-mt ${randomx_sources})
+set_property(TARGET randomx-mt PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET randomx-mt PROPERTY CXX_STANDARD 11)
+set_property(TARGET randomx-mt PROPERTY CXX_STANDARD_REQUIRED ON)
+target_compile_options(randomx-mt PRIVATE -O3 -pthread -msimd128)
+
 if(TARGET generate-asm)
   add_dependencies(randomx generate-asm)
 endif()
@@ -172,7 +181,7 @@ set_target_properties(web-randomx PROPERTIES LINK_FLAGS "-O3 -sWASM=1 -sMODULARI
 add_executable(web-randomx-mt
   src/cpp/web_randomx.cpp)
 target_link_libraries(web-randomx-mt
-  PRIVATE randomx)
+  PRIVATE randomx-mt)
 set_property(TARGET web-randomx-mt PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET web-randomx-mt PROPERTY CXX_STANDARD 11)
 set_target_properties(web-randomx-mt PROPERTIES COMPILE_FLAGS "-O3 -pthread -msimd128 -ffast-math")

@@ -101,7 +101,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=50', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=51', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -111,6 +111,7 @@ function loadWasm() {
       rx = {
         module,
         mineFn: module._randomx_mine,
+        hashFn: module._randomx_hash,
         setThreads: module._randomx_set_threads,
         isFull: module._randomx_is_full_mem,
         dsBegin: module._randomx_dataset_begin,
@@ -180,6 +181,29 @@ function heightArgs() {
   return BigInt(job.height || 0);
 }
 
+/* Re-derive the result with the single-VM _randomx_hash before we tell the
+   client to submit. The pthread mine path used to return a hash that did not
+   belong to the nonce it reported (the wasm kept the FP rounding mode in a
+   global, so concurrent VMs clobbered each other). The pool then rebuilt the
+   blob, hashed our nonce, and answered "Low difficulty share" every time.
+   One extra hash per share is cheap insurance against a silent regression. */
+function verifySolved(nonceHex, resultHex, blobHex, seedHex, height) {
+  if (!rx || typeof rx.hashFn !== 'function') return false;
+  const blob = hexToBytes(blobHex);
+  const nonce = hexToBytes(nonceHex);
+  if (blob.length < 43 || nonce.length !== 4) return false;
+  blob.set(nonce, 39);
+  bindHeap();
+  rx.blob.fill(0);
+  rx.blob.set(blob.subarray(0, Math.min(blob.length, 256)));
+  rx.seed.fill(0);
+  rx.seed.set(hexToBytes(seedHex).subarray(0, 32));
+  const h = BigInt(height || 0);
+  const ok = rx.hashFn(h, h, rx.seedPtr, rx.blobPtr, blob.length, rx.hashPtr);
+  bindHeap();
+  return !!ok && bytesToHex(rx.hash) === resultHex;
+}
+
 function mineBatch(maxHashes) {
   if (!rx || !job || blobLen < 43) return { n: 0, solved: null };
   const hashedJobId = job.job_id;
@@ -217,6 +241,13 @@ function mineBatch(maxHashes) {
   const solved = rx.found[0]
     ? { nonceHex: bytesToHex(rx.nonce), result: bytesToHex(rx.hash), job_id: hashedJobId }
     : null;
+  if (solved && !verifySolved(solved.nonceHex, solved.result, hashedBlob, job.seed_hash, job.height)) {
+    postMessage({
+      type: 'status',
+      message: 'Mining self-check failed: the wasm result is not the hash of its own nonce, so the pool would reject it. Share dropped. Rebuild web-randomx-mt (thread-local rounding mode).',
+    });
+    return { n: n | 0, solved: null };
+  }
   return { n: n | 0, solved };
 }
 

@@ -486,7 +486,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=50', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=51', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
