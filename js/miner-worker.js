@@ -509,8 +509,12 @@ function loop() {
     }
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
-    if (!isPthreadNoise(msg)) {
-      postMessage({ type: 'status', message: `Hash loop: ${msg.slice(0, 120)}` });
+    if (isPthreadNoise(msg)) {
+      /* ignore */
+    } else {
+      hashing = false;
+      postMessage({ type: 'status', message: `Hash loop stopped: ${msg.slice(0, 160)}` });
+      return;
     }
   }
   if (n) postMessage({ type: 'hashes', n });
