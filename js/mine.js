@@ -236,6 +236,7 @@ stopBtn.addEventListener('click', () => {
   logLine('', 'stop');
 });
 
+window.__voltminer = client;
 window.addEventListener('pagehide', () => { if (client.wantRun) client.stop(); });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && client.wantRun) {
