@@ -477,12 +477,19 @@ function loop() {
   const t0 = performance.now();
   let n = 0;
   let solved = null;
-  const batch = dsPhase === 'done' ? 8 : 4;
-  while (performance.now() - t0 < 400) {
-    const r = mineBatch(batch);
-    n += r.n;
-    if (r.solved) { solved = r.solved; break; }
-    if (!r.n) break;
+  const batch = dsPhase === 'done' ? Math.max(32, cpuThreads * 16) : 4;
+  try {
+    while (performance.now() - t0 < 400) {
+      const r = mineBatch(batch);
+      n += r.n;
+      if (r.solved) { solved = r.solved; break; }
+      if (!r.n) break;
+    }
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err);
+    if (!/unwind/i.test(msg)) {
+      postMessage({ type: 'status', message: `Hash loop: ${msg.slice(0, 120)}` });
+    }
   }
   if (n) postMessage({ type: 'hashes', n });
   if (solved) {

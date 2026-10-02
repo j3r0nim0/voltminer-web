@@ -371,11 +371,13 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=24', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=25', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
+      const msg = String(ev.message || ev.error || '');
+      if (/unwind/i.test(msg) || /^\d+$/.test(msg.trim())) return;
       this.#emit('error', {
-        message: `Hash worker crashed: ${ev.message || 'unknown'} (often a 2 GB dataset OOM — need 16 GB RAM, close other tabs).`,
+        message: `Hash worker error: ${msg || 'unknown'}`,
       });
     };
     wrk.onmessageerror = () => {
