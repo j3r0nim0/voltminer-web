@@ -68,6 +68,43 @@ threadsEl.addEventListener('input', () => {
 
 let filling = false;
 let lastFillPct = -1;
+let soakStartedAt = 0;
+let soakTimer = null;
+
+function formatSoak(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
+function paintSoak() {
+  const el = $('st-soak');
+  if (!el) return;
+  if (!soakStartedAt) {
+    el.textContent = '0:00';
+    return;
+  }
+  el.textContent = formatSoak(Date.now() - soakStartedAt);
+}
+
+function startSoakClock() {
+  soakStartedAt = Date.now();
+  if (soakTimer) clearInterval(soakTimer);
+  paintSoak();
+  soakTimer = setInterval(paintSoak, 1000);
+}
+
+function stopSoakClock() {
+  if (soakTimer) {
+    clearInterval(soakTimer);
+    soakTimer = null;
+  }
+  paintSoak();
+}
 
 function setStatus(msg) {
   $('st-status').textContent = msg;
@@ -107,6 +144,7 @@ function render(stats) {
   $('st-th').textContent = String(stats.threads);
   $('st-ok').textContent = String(stats.accepted);
   $('st-tot').textContent = String(stats.totalHashes);
+  paintSoak();
 }
 
 const client = new MinerClient((ev) => {
@@ -198,8 +236,9 @@ function startMining() {
   stopBtn.disabled = false;
   walletEl.disabled = true;
   consentEl.disabled = true;
+  startSoakClock();
   setStatus('Starting…');
-  logLine('', 'start');
+  logLine('', `start soak=${formatSoak(0)}`);
 
   try {
     client.start({
@@ -232,8 +271,10 @@ stopBtn.addEventListener('click', () => {
   stopBtn.disabled = true;
   walletEl.disabled = false;
   consentEl.disabled = false;
-  setStatus('Stopped.');
-  logLine('', 'stop');
+  stopSoakClock();
+  const elapsed = soakStartedAt ? formatSoak(Date.now() - soakStartedAt) : '0:00';
+  setStatus(`Stopped. Soak ${elapsed}.`);
+  logLine('', `stop soak=${elapsed}`);
 });
 
 window.__voltminer = client;
