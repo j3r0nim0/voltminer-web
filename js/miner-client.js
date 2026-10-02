@@ -166,9 +166,9 @@ export class MinerClient {
     this.paused = false;
     this.pendingShare = null;
     const rawWallet = wallet.trim();
-    // Same VarDiff suffix as the APK (MiningService.START_DIFFICULTY = 30000).
-    // MO honors wallet+N. 10k was spraying shares at the droplet IP.
-    this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+30000`;
+    // Temporary: 10k floor so headless soaks can land a submit faster while
+    // we debug gulf's Low-diff on local-ok hashes. APK stays at 30000.
+    this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+10000`;
     this.password = password || 'x';
     this.threads = canShareDataset()
       ? Math.max(1, Math.min(4, Number(threads) || 1))
@@ -481,7 +481,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=44', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=45', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
