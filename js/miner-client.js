@@ -270,7 +270,8 @@ export class MinerClient {
         method: 'login',
         params: {
           login: this.wallet,
-          pass: this.password,
+          pass: this.password || 'x',
+          rigid: this.password || '',
           agent: 'VoltMiner-web/rx-experiment',
           algo: ['rx/0', 'rx/wow'],
         },
@@ -431,7 +432,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=40', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=41', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
