@@ -447,7 +447,7 @@ function loop() {
       n: first.n,
     });
     dsPhase = 'try';
-    kickLoop();
+    scheduleLoop(0);
     return;
   }
 
@@ -457,7 +457,7 @@ function loop() {
     if (!ok) {
       dsPhase = 'skip';
       postMessage({ type: 'status', message: 'Dataset alloc failed — staying in light/cache. Fast mode needs ~3 GB free in this tab (Chrome, 16 GB PC).' });
-      kickLoop();
+      scheduleLoop(0);
       return;
     }
     const gen = dsGen;
