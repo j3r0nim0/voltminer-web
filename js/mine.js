@@ -137,7 +137,8 @@ const client = new MinerClient((ev) => {
     if (!filling) setStatus(`Job ${ev.jobId || ''} (${ev.algo || 'rx/0'})`);
   }
   if (ev.type === 'tick') {
-    logLine('hash', `${(ev.hashrate || 0).toFixed(1)} H/s  +${ev.n || 0} hashes  total=${ev.total || 0}  job=${ev.jobId || '—'}`);
+    const dt = ev.dt ? `  ${ev.dt.toFixed(1)}s` : '';
+    logLine('hash', `${(ev.hashrate || 0).toFixed(1)} H/s  +${ev.n || 0} hashes  total=${ev.total || 0}  job=${ev.jobId || '—'}${dt}`);
   }
   if (ev.type === 'submit') {
     logLine('job', `submit job=${ev.jobId || ''} nonce=${ev.nonce || ''} result=${String(ev.result || '').slice(0, 16)}…`);
