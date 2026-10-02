@@ -1,20 +1,24 @@
 /* RandomX hash worker (experimental).
 
    JIT is not available in Wasm (CompiledVm::execute is empty).
-   We hash in light/cache immediately, then try to fill the ~2 GB
-   dataset in small C++ chunks so the worker can yield and the tab
-   stays alive. If alloc fails, we stay in light mode. */
+   Light/cache hashes immediately. Then we allocate the ~2 GB dataset and
+   either restore it from OPFS (keyed by seed_hash) or fill it in C++
+   chunks. A seed change drops the old file and rebuilds. */
 
 const WASM_JS = new URL('vendor/randomx/web-randomx.js', self.location).href;
-const DS_CHUNK = 131072; // ~8 MB of dataset items per step
+const DS_CHUNK = 131072; // ~8 MB of dataset items per compute step
+const IO_CHUNK = 8 * 1024 * 1024; // 8 MB copy to/from OPFS
+const OPFS_DIR = 'voltminer-rx';
 
 let modulePromise = null;
 let rx = null;
 let nonceBase = (Math.random() * 0x100000000) >>> 0;
 let lightReady = false;
-let dsPhase = 'idle'; // idle | filling | done | skip
+let dsPhase = 'idle'; // idle | try | wait | restore | filling | saving | done | skip
 let lastPct = -1;
-let hashing = true; // pause stops hashes, not dataset fill
+let hashing = true;
+let dsGen = 0;
+let cachedSeedHex = '';
 
 function hexToBytes(hex) {
   const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
@@ -27,6 +31,10 @@ function bytesToHex(bytes) {
   let s = '';
   for (let i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, '0');
   return s;
+}
+
+function seedHex() {
+  return bytesToHex(seedBytes);
 }
 
 function bindHeap() {
@@ -75,6 +83,10 @@ function loadWasm() {
         dsBegin: module._randomx_dataset_begin,
         dsStep: module._randomx_dataset_step,
         dsPct: module._randomx_dataset_percent,
+        dsPtr: module._randomx_dataset_ptr,
+        dsItems: module._randomx_dataset_items,
+        dsItemBytes: module._randomx_dataset_item_bytes,
+        dsMark: module._randomx_dataset_mark_ready,
         blobPtr: module._malloc(256),
         seedPtr: module._malloc(32),
         targetPtr: module._malloc(8),
@@ -101,6 +113,7 @@ let targetBytes = new Uint8Array(4).fill(0xff);
 let blobLen = 0;
 
 function setJob(next) {
+  const prevSeed = seedHex();
   job = next;
   if (!job || !job.blob) return;
   blobBytes = hexToBytes(job.blob);
@@ -108,11 +121,22 @@ function setJob(next) {
   seedBytes = hexToBytes(job.seed_hash);
   const t = hexToBytes(job.target);
   targetBytes = t.length ? t : new Uint8Array(4).fill(0xff);
+  const nextSeed = seedHex();
+  if (prevSeed && nextSeed && prevSeed !== nextSeed) {
+    dsGen += 1;
+    lastPct = -1;
+    cachedSeedHex = '';
+    if (dsPhase === 'skip') return;
+    dsPhase = 'try';
+    postMessage({
+      type: 'status',
+      message: `seed_hash changed (${prevSeed.slice(0, 8)}… → ${nextSeed.slice(0, 8)}…). Dropping cached dataset.`,
+    });
+  }
 }
 
 function heightArgs() {
-  const height = BigInt(job.height || 0);
-  return height;
+  return BigInt(job.height || 0);
 }
 
 function mineBatch(maxHashes) {
@@ -181,6 +205,159 @@ function datasetStep() {
   }
 }
 
+function datasetByteLength() {
+  bindHeap();
+  const items = rx.dsItems ? rx.dsItems() | 0 : 0;
+  const b = rx.dsItemBytes ? rx.dsItemBytes() | 0 : 64;
+  return items * b;
+}
+
+function datasetView() {
+  bindHeap();
+  const ptr = rx.dsPtr ? rx.dsPtr() | 0 : 0;
+  const len = datasetByteLength();
+  if (!ptr || len <= 0) return null;
+  return new Uint8Array(rx.module.HEAPU8.buffer, ptr, len);
+}
+
+async function opfsDir() {
+  if (!navigator.storage || !navigator.storage.getDirectory) return null;
+  const root = await navigator.storage.getDirectory();
+  return root.getDirectoryHandle(OPFS_DIR, { create: true });
+}
+
+async function dropOtherSeeds(keepHex) {
+  try {
+    const dir = await opfsDir();
+    if (!dir) return;
+    const keep = `${keepHex}.bin`;
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== 'file') continue;
+      if (name !== keep) {
+        await dir.removeEntry(name);
+      }
+    }
+  } catch (err) {
+    console.warn('opfs drop failed', err.message || err);
+  }
+}
+
+async function restoreFromOpfs(gen) {
+  const hex = seedHex();
+  if (!hex || hex.length < 16) return false;
+  try {
+    const dir = await opfsDir();
+    if (!dir) {
+      postMessage({ type: 'status', message: 'OPFS not available — filling dataset in this tab.' });
+      return false;
+    }
+    await dropOtherSeeds(hex);
+    let fh;
+    try {
+      fh = await dir.getFileHandle(`${hex}.bin`);
+    } catch {
+      postMessage({ type: 'status', message: 'No cached dataset for this seed — filling (~6 min once).' });
+      return false;
+    }
+    const file = await fh.getFile();
+    const expect = datasetByteLength();
+    if (!expect || file.size !== expect) {
+      postMessage({
+        type: 'status',
+        message: `Cached dataset size mismatch (${file.size} vs ${expect}) — refilling.`,
+      });
+      try { await dir.removeEntry(`${hex}.bin`); } catch { /* ignore */ }
+      return false;
+    }
+    postMessage({ type: 'status', message: 'Restoring ~2 GB dataset from disk…' });
+    const acc = await fh.createSyncAccessHandle();
+    try {
+      let off = 0;
+      let last = -1;
+      const tmp = new Uint8Array(IO_CHUNK);
+      while (off < expect) {
+        if (gen !== dsGen) return false;
+        const n = Math.min(IO_CHUNK, expect - off);
+        const got = acc.read(tmp.subarray(0, n), { at: off });
+        const view = datasetView();
+        if (!view) return false;
+        view.set(tmp.subarray(0, got), off);
+        off += got;
+        const pct = Math.floor((off * 100) / expect);
+        if (pct !== last) {
+          last = pct;
+          postMessage({ type: 'ds', pct });
+        }
+      }
+    } finally {
+      acc.close();
+    }
+    if (gen !== dsGen) return false;
+    bindHeap();
+    if (!rx.dsMark || !rx.dsMark()) return false;
+    cachedSeedHex = hex;
+    return true;
+  } catch (err) {
+    console.warn('opfs restore failed', err.message || err);
+    postMessage({ type: 'status', message: `OPFS restore failed (${err.message || err}) — filling.` });
+    return false;
+  }
+}
+
+async function saveToOpfs(gen) {
+  const hex = seedHex();
+  if (!hex || hex.length < 16) return;
+  try {
+    const dir = await opfsDir();
+    if (!dir) return;
+    await dropOtherSeeds(hex);
+    const view = datasetView();
+    if (!view) return;
+    postMessage({ type: 'status', message: 'Saving dataset to this browser (next Start skips the 6 min fill)…' });
+    const fh = await dir.getFileHandle(`${hex}.bin`, { create: true });
+    const acc = await fh.createSyncAccessHandle();
+    try {
+      acc.truncate(0);
+      let off = 0;
+      let last = -1;
+      while (off < view.byteLength) {
+        if (gen !== dsGen) return;
+        const n = Math.min(IO_CHUNK, view.byteLength - off);
+        const v = datasetView();
+        if (!v) return;
+        acc.write(v.subarray(off, off + n), { at: off });
+        off += n;
+        const pct = Math.floor((off * 100) / view.byteLength);
+        if (pct !== last) {
+          last = pct;
+          postMessage({ type: 'status', message: `Saving dataset ${pct}%` });
+        }
+      }
+      acc.flush();
+    } finally {
+      acc.close();
+    }
+    cachedSeedHex = hex;
+    postMessage({ type: 'status', message: 'Dataset cached in this browser until seed_hash changes (~2.8 days).' });
+  } catch (err) {
+    console.warn('opfs save failed', err.message || err);
+    postMessage({ type: 'status', message: `Could not cache dataset (${err.message || err}). Next visit will refill.` });
+  }
+}
+
+function markFullReady(how) {
+  dsPhase = 'done';
+  lastPct = 100;
+  postMessage({ type: 'ds', pct: 100 });
+  postMessage({ type: 'dataset', full: true, ms: 0, n: 0 });
+  postMessage({
+    type: 'status',
+    message: how === 'opfs'
+      ? 'RandomX fast/full dataset restored from disk. Hashing with full mem.'
+      : 'RandomX fast/full dataset ready. Hashing with full mem.',
+  });
+}
+
 function loop() {
   if (!running || !job) return;
   if (!rx) {
@@ -204,18 +381,35 @@ function loop() {
   }
 
   if (dsPhase === 'try') {
-    postMessage({ type: 'status', message: 'Trying ~2 GB dataset alloc (chunked). Tab will keep hashing if this fails.' });
+    postMessage({ type: 'status', message: 'Trying ~2 GB dataset alloc. Tab stays in light mode if this fails.' });
     const ok = tryDatasetBegin();
     if (!ok) {
       dsPhase = 'skip';
       postMessage({ type: 'status', message: 'Dataset alloc failed — staying in light/cache. Fast mode needs ~3 GB free in this tab (Chrome, 16 GB PC).' });
-    } else {
-      dsPhase = 'filling';
-      postMessage({ type: 'status', message: 'Dataset allocated. Filling in chunks (progress below). Hashing pauses until 100%.' });
+      if (running) setTimeout(loop, 0);
+      return;
     }
-    if (running) setTimeout(loop, 0);
+    const gen = dsGen;
+    dsPhase = 'wait';
+    postMessage({ type: 'status', message: 'Dataset allocated. Checking OPFS cache for this seed_hash…' });
+    restoreFromOpfs(gen).then((hit) => {
+      if (gen !== dsGen) {
+        dsPhase = 'try';
+        if (running) setTimeout(loop, 0);
+        return;
+      }
+      if (hit) {
+        markFullReady('opfs');
+      } else {
+        dsPhase = 'filling';
+        postMessage({ type: 'status', message: 'Dataset allocated. Filling in chunks (progress below). Hashing pauses until 100%.' });
+      }
+      if (running) setTimeout(loop, 0);
+    });
     return;
   }
+
+  if (dsPhase === 'wait') return;
 
   if (dsPhase === 'filling') {
     const t0 = performance.now();
@@ -232,20 +426,24 @@ function loop() {
         postMessage({ type: 'ds', pct });
       }
       if (pct >= 100) {
-        dsPhase = 'done';
-        postMessage({
-          type: 'dataset',
-          full: true,
-          ms: 0,
-          n: 0,
+        const gen = dsGen;
+        dsPhase = 'saving';
+        saveToOpfs(gen).then(() => {
+          if (gen !== dsGen) {
+            dsPhase = 'try';
+          } else {
+            markFullReady('fill');
+          }
+          if (running) setTimeout(loop, 0);
         });
-        postMessage({ type: 'status', message: 'RandomX fast/full dataset ready. Hashing with full mem.' });
-        break;
+        return;
       }
     }
     if (running) setTimeout(loop, 0);
     return;
   }
+
+  if (dsPhase === 'saving') return;
 
   if (!hashing) {
     if (running) setTimeout(loop, 250);
@@ -284,6 +482,8 @@ onmessage = function (e) {
         postMessage({ type: 'ready', wasm: ok });
         loop();
       });
+    } else if (dsPhase === 'try' || dsPhase === 'idle') {
+      loop();
     }
   }
   if (data.type === 'pause') {

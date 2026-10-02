@@ -48,7 +48,7 @@
           <li><strong>Your wallet, your coins.</strong> The address goes to the pool as the stratum login. VoltMiner never holds XMR.</li>
           <li><strong>Ad-blockers will fight this.</strong> uBlock Origin and some antivirus flag Wasm miners even with consent. Pause them on this page or the WebSocket never opens.</li>
           <li><strong>Chrome, not Safari.</strong> Fast mode grows Wasm toward ~3 GB. Safari often cannot. Use a 16 GB PC and close other tabs.</li>
-          <li><strong>Chunked dataset.</strong> Light/cache hashes immediately. Then we try to fill the ~2 GB RandomX dataset in small steps (progress in the log). If alloc fails, we stay in light mode. A phone running native XMRig will still beat interpreted Wasm.</li>
+          <li><strong>Chunked dataset + OPFS cache.</strong> Light/cache hashes immediately. Then we fill the ~2 GB dataset (~6 min once per <code>seed_hash</code>, ~2.8 days). Next Start restores it from this browser’s disk. A seed change drops the old file. Safari / low RAM stay in light mode.</li>
           <li><strong>Start-diff 30 000.</strong> Same <code>wallet+30000</code> as the Android app so we do not spray 10k shares at the pool. Jobs still rotate every few seconds; this only makes shares rarer (~14 min at 35 H/s).</li>
           <li><strong>Leave the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can IP-ban the bridge for 10 minutes.</li>
           <li><strong>RandomX in a tab, not XMRig.</strong> Same algo family as the APK (<code>rx/0</code>), no huge pages, no JIT. The Android app will always win on the same machine.</li>
@@ -115,7 +115,7 @@
     </div>
   </footer>
 
-  <script src="js/pwa.js?v=19"></script>
-  <script type="module" src="js/mine.js?v=19"></script>
+  <script src="js/pwa.js?v=20"></script>
+  <script type="module" src="js/mine.js?v=20"></script>
 </body>
 </html>

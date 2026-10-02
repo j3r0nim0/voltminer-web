@@ -108,7 +108,7 @@ const client = new MinerClient((ev) => {
     logLine('hash', line);
   }
   if (ev.type === 'status') {
-    if (/fast\/full dataset ready/i.test(ev.message || '')) {
+    if (/fast\/full dataset ready|restored from disk/i.test(ev.message || '')) {
       filling = false;
       setDataset('100% full');
     }
@@ -116,6 +116,9 @@ const client = new MinerClient((ev) => {
     if (/Dataset alloc failed|fill aborted/i.test(ev.message || '')) {
       filling = false;
       setDataset('light');
+    }
+    if (/Restoring ~2 GB|Saving dataset|Checking OPFS|Filling in chunks/i.test(ev.message || '')) {
+      filling = true;
     }
     if (filling && /^Job /i.test(ev.message || '')) {
       logLine('', ev.message);
