@@ -6,8 +6,9 @@
    chunks. A seed change drops the old file and rebuilds. */
 
 const WASM_JS = new URL('vendor/randomx/web-randomx.js', self.location).href;
-const DS_CHUNK = 131072; // ~8 MB of dataset items per compute step
-const IO_CHUNK = 8 * 1024 * 1024; // 8 MB copy to/from OPFS
+const DS_CHUNK = 262144; // ~16 MB of dataset items per compute step
+const IO_CHUNK = 16 * 1024 * 1024; // 16 MB copy to/from OPFS
+const OPFS_BUDGET_MS = 2500;
 const OPFS_DIR = 'voltminer-rx';
 
 let modulePromise = null;
@@ -242,19 +243,27 @@ async function dropOtherSeeds(keepHex) {
   }
 }
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(label + ' timed out')), ms);
+    }),
+  ]);
+}
+
 async function restoreFromOpfs(gen) {
   const hex = seedHex();
   if (!hex || hex.length < 16) return false;
   try {
-    const dir = await opfsDir();
+    const dir = await withTimeout(opfsDir(), OPFS_BUDGET_MS, 'OPFS');
     if (!dir) {
       postMessage({ type: 'status', message: 'OPFS not available — filling dataset in this tab.' });
       return false;
     }
-    await dropOtherSeeds(hex);
     let fh;
     try {
-      fh = await dir.getFileHandle(`${hex}.bin`);
+      fh = await withTimeout(dir.getFileHandle(`${hex}.bin`), OPFS_BUDGET_MS, 'OPFS open');
     } catch {
       postMessage({ type: 'status', message: 'No cached dataset for this seed — filling (~6 min once).' });
       return false;
@@ -390,40 +399,38 @@ function loop() {
       return;
     }
     const gen = dsGen;
-    dsPhase = 'wait';
-    postMessage({ type: 'status', message: 'Dataset allocated. Checking OPFS cache for this seed_hash…' });
-    restoreFromOpfs(gen).then((hit) => {
-      if (gen !== dsGen) {
-        dsPhase = 'try';
-        if (running) setTimeout(loop, 0);
-        return;
-      }
-      if (hit) {
+    dsPhase = 'filling';
+    lastPct = -1;
+    postMessage({ type: 'ds', pct: 0 });
+    postMessage({ type: 'status', message: 'Dataset allocated. Filling in chunks (progress below). Hashing pauses until 100%.' });
+    withTimeout(restoreFromOpfs(gen), OPFS_BUDGET_MS, 'OPFS restore').then((hit) => {
+      if (gen !== dsGen) return;
+      if (hit && dsPhase === 'filling') {
         markFullReady('opfs');
-      } else {
-        dsPhase = 'filling';
-        postMessage({ type: 'status', message: 'Dataset allocated. Filling in chunks (progress below). Hashing pauses until 100%.' });
+        if (running) setTimeout(loop, 0);
       }
-      if (running) setTimeout(loop, 0);
+    }).catch(() => {
+      /* miss or timeout — fill already running */
     });
+    if (running) setTimeout(loop, 0);
     return;
   }
-
-  if (dsPhase === 'wait') return;
 
   if (dsPhase === 'filling') {
     const t0 = performance.now();
     let pct = lastPct;
-    while (performance.now() - t0 < 350) {
+    let stepped = false;
+    while (performance.now() - t0 < 500) {
       pct = datasetStep();
+      stepped = true;
       if (pct < 0) {
         dsPhase = 'skip';
         postMessage({ type: 'status', message: 'Dataset fill aborted — staying in light/cache.' });
         break;
       }
-      if (pct !== lastPct) {
+      if (pct !== lastPct || lastPct < 0) {
         lastPct = pct;
-        postMessage({ type: 'ds', pct });
+        postMessage({ type: 'ds', pct: Math.max(0, pct) });
       }
       if (pct >= 100) {
         const gen = dsGen;
