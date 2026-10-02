@@ -76,6 +76,8 @@ export class MinerClient {
     this.pingTimer = null;
     this.watchdogTimer = null;
     this.lastWorkerAt = 0;
+    this.reconnectAttempt = 0;
+    this.paused = false;
   }
 
   #emit(type, detail) {
@@ -112,6 +114,8 @@ export class MinerClient {
     this.rpcId = 1;
     this.submitIds.clear();
     this.sessionId = null;
+    this.reconnectAttempt = 0;
+    this.paused = false;
     const rawWallet = wallet.trim();
     // MO start-diff is wallet+N (password d=N is ignored). Floor is 10000.
     this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+10000`;
@@ -219,6 +223,7 @@ export class MinerClient {
           algo: ['rx/0', 'rx/wow'],
         },
       });
+      this.reconnectAttempt = 0;
       this.#emit('status', { message: 'Connected. Logging in…' });
     };
     ws.onmessage = (e) => {
@@ -242,7 +247,8 @@ export class MinerClient {
       if (this.ws !== ws) return;
       this.connected = false;
       this.job = null;
-      const why = `Disconnected from bridge. code=${ev.code} clean=${ev.wasClean}${ev.reason ? ` reason=${ev.reason}` : ''}`;
+      this.#pauseWorkers();
+      const why = `Disconnected from bridge. code=${ev.code} clean=${ev.wasClean}${ev.reason ? ` reason=${ev.reason}` : ''}. Hashing paused (dataset kept).`;
       this.#emit('status', { message: why });
       this.#scheduleReconnect();
     };
@@ -258,7 +264,10 @@ export class MinerClient {
       if (obj.error) {
         const em = obj.error.message || JSON.stringify(obj.error);
         this.#emit('error', { message: 'Login failed: ' + em });
-        if (/suspended/i.test(em)) this.#scheduleReconnect(10 * 60 * 1000);
+        if (/suspended/i.test(em)) {
+          this.#pauseWorkers();
+          this.#scheduleReconnect(10 * 60 * 1000);
+        }
         return;
       }
       const result = obj.result || {};
@@ -274,6 +283,9 @@ export class MinerClient {
       if (obj.error || obj.result === false) {
         if (kind !== 'probe') this.rejected += 1;
         this.#emit('error', { message: (kind === 'probe' ? 'Probe: ' : 'Share rejected: ') + msg });
+        if (/low difficulty/i.test(msg || '')) {
+          this.#emit('status', { message: 'Low difficulty — valid RandomX, below this job’s target. Keep hashing; do not reconnect.' });
+        }
       } else {
         this.accepted += 1;
         this.#emit('accepted', {});
@@ -291,6 +303,7 @@ export class MinerClient {
       height: job.height || 0,
       algo,
     };
+    this.#resumeWorkers();
     this.#broadcastJob();
     this.#emit('job', { jobId: job.job_id, algo });
   }
@@ -302,10 +315,32 @@ export class MinerClient {
     }
   }
 
+  #pauseWorkers() {
+    this.paused = true;
+    for (const wrk of this.workers) {
+      try { wrk.postMessage({ type: 'pause' }); } catch { /* ignore */ }
+    }
+  }
+
+  #resumeWorkers() {
+    this.paused = false;
+    for (const wrk of this.workers) {
+      try { wrk.postMessage({ type: 'resume' }); } catch { /* ignore */ }
+    }
+  }
+
   #scheduleReconnect(ms) {
     if (!this.wantRun) return;
     if (this.reconnectTimer) return;
-    const wait = Math.max(3000, ms || 3000);
+    if (ms == null) {
+      this.reconnectAttempt += 1;
+      const exp = Math.min(8, this.reconnectAttempt);
+      ms = Math.min(10 * 60 * 1000, 15000 * (2 ** (exp - 1)));
+    } else {
+      this.reconnectAttempt = 0;
+    }
+    const wait = Math.max(15000, ms);
+    this.#emit('status', { message: `Reconnect in ${Math.round(wait / 1000)}s (pool IP-bans fast logins). Dataset kept.` });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.wantRun) this.#connect();
@@ -383,6 +418,14 @@ export class MinerClient {
     if (data.type === 'solved') {
       this.totalHashes += 1;
       this.windowHashes += 1;
+      if (!this.connected || !this.sessionId || !this.job) {
+        this.#emit('status', { message: `Found share for ${data.job_id} but socket is down — not submitting.` });
+        return;
+      }
+      if (this.job.job_id !== data.job_id) {
+        this.#emit('status', { message: `Stale share job=${data.job_id} current=${this.job.job_id} — dropped.` });
+        return;
+      }
       const id = this.#nextId();
       this.submitIds.set(id, true);
       this.#emit('submit', {

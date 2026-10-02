@@ -116,6 +116,7 @@ function heightArgs() {
 
 function mineBatch(maxHashes) {
   if (!rx || !job || blobLen < 43) return { n: 0, solved: null };
+  const hashedJobId = job.job_id;
   bindHeap();
   rx.blob.fill(0);
   rx.blob.set(blobBytes.subarray(0, Math.min(blobLen, 256)));
@@ -144,7 +145,7 @@ function mineBatch(maxHashes) {
   );
   bindHeap();
   const solved = rx.found[0]
-    ? { nonceHex: bytesToHex(rx.nonce), result: bytesToHex(rx.hash) }
+    ? { nonceHex: bytesToHex(rx.nonce), result: bytesToHex(rx.hash), job_id: hashedJobId }
     : null;
   return { n: n | 0, solved };
 }
@@ -259,7 +260,7 @@ function loop() {
   if (solved) {
     postMessage({
       type: 'solved',
-      job_id: job.job_id,
+      job_id: solved.job_id,
       nonce: solved.nonceHex,
       result: solved.result,
     });
@@ -277,6 +278,15 @@ onmessage = function (e) {
         postMessage({ type: 'ready', wasm: ok });
         loop();
       });
+    }
+  }
+  if (data.type === 'pause') {
+    running = false;
+  }
+  if (data.type === 'resume') {
+    if (!running) {
+      running = true;
+      loop();
     }
   }
   if (data.type === 'stop') running = false;
