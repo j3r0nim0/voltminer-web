@@ -160,7 +160,7 @@ function setJob(next) {
   blobLen = blobBytes.length;
   seedBytes = hexToBytes(job.seed_hash);
   const t = hexToBytes(job.target);
-  targetBytes = t.length ? t : new Uint8Array(4).fill(0xff);
+  targetBytes = t.length >= 8 ? t.subarray(0, 8) : (t.length ? t : new Uint8Array(4).fill(0xff));
   const nextSeed = seedHex();
   if (prevSeed && nextSeed && prevSeed !== nextSeed) {
     dsGen += 1;

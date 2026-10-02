@@ -83,6 +83,7 @@ export class MinerClient {
     this.watchdogTimer = null;
     this.lastWorkerAt = 0;
     this.reconnectAttempt = 0;
+    this.holdReconnectUntil = 0;
     this.paused = false;
   }
 
@@ -264,6 +265,12 @@ export class MinerClient {
       this.#pauseWorkers();
       const why = `Disconnected from bridge. code=${ev.code} clean=${ev.wasClean}${ev.reason ? ` reason=${ev.reason}` : ''}. Hashing paused (dataset kept).`;
       this.#emit('status', { message: why });
+      if (this.holdReconnectUntil && Date.now() < this.holdReconnectUntil) {
+        const left = this.holdReconnectUntil - Date.now();
+        this.#emit('status', { message: `Not reconnecting yet — pool kick / IP-ban window (${Math.round(left / 1000)}s left).` });
+        this.#scheduleReconnect(left);
+        return;
+      }
       this.#scheduleReconnect();
     };
   }
@@ -280,6 +287,7 @@ export class MinerClient {
         this.#emit('error', { message: 'Login failed: ' + em });
         if (/suspended/i.test(em)) {
           this.#pauseWorkers();
+          this.holdReconnectUntil = Date.now() + 10 * 60 * 1000;
           this.#scheduleReconnect(10 * 60 * 1000);
         }
         return;
@@ -299,6 +307,11 @@ export class MinerClient {
         this.#emit('error', { message: (kind === 'probe' ? 'Probe: ' : 'Share rejected: ') + msg });
         if (/low difficulty/i.test(msg || '')) {
           this.#emit('status', { message: 'Low difficulty — valid RandomX, below this job’s target. Keep hashing; do not reconnect.' });
+          this.holdReconnectUntil = Date.now() + 10 * 60 * 1000;
+          if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+          }
         }
       } else {
         this.accepted += 1;
@@ -353,6 +366,9 @@ export class MinerClient {
     } else {
       this.reconnectAttempt = 0;
     }
+    if (this.holdReconnectUntil) {
+      ms = Math.max(ms, this.holdReconnectUntil - Date.now());
+    }
     const wait = Math.max(15000, ms);
     this.#emit('status', { message: `Reconnect in ${Math.round(wait / 1000)}s (pool IP-bans fast logins). Dataset kept.` });
     this.reconnectTimer = setTimeout(() => {
@@ -371,7 +387,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=34', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=35', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
