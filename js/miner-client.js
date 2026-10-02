@@ -53,8 +53,8 @@ export function resultToDiff(resultHex) {
   let u = 0n;
   for (let i = 0; i < 32; i++) u |= BigInt(h[i]) << BigInt(8 * i);
   if (u === 0n) return 0;
-  const d = 0xFFFFFFFFFFFFFFFFn / u;
-  return d > 0xFFFFFFFFn ? Number(0xFFFFFFFFn) : Number(d);
+  const d = ((1n << 256n) - 1n) / u;
+  return d > 0x1fffffffffffffn ? Number(0x1fffffffffffffn) : Number(d);
 }
 
 
@@ -424,6 +424,10 @@ export class MinerClient {
       hashDiff,
       ok: hashDiff > 0 && jobDiff > 0 && hashDiff >= jobDiff,
     });
+    if (!(hashDiff > 0 && jobDiff > 0 && hashDiff >= jobDiff)) {
+      this.#emit('status', { message: `Local below-target — not submitting hashDiff=${hashDiff} jobDiff=${jobDiff}` });
+      return;
+    }
     this.#send({
       id,
       jsonrpc: '2.0',
@@ -482,7 +486,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=49', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=50', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
@@ -582,6 +586,10 @@ export class MinerClient {
         hashDiff,
         ok: hashDiff > 0 && jobDiff > 0 && hashDiff >= jobDiff,
       });
+      if (!(hashDiff > 0 && jobDiff > 0 && hashDiff >= jobDiff)) {
+        this.#emit('status', { message: `Local below-target — not submitting hashDiff=${hashDiff} jobDiff=${jobDiff}` });
+        return;
+      }
       this.#send({
         id,
         jsonrpc: '2.0',
