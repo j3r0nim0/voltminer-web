@@ -117,8 +117,9 @@ export class MinerClient {
     this.reconnectAttempt = 0;
     this.paused = false;
     const rawWallet = wallet.trim();
-    // MO start-diff is wallet+N (password d=N is ignored). Floor is 10000.
-    this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+10000`;
+    // Same VarDiff suffix as the APK (MiningService.START_DIFFICULTY = 30000).
+    // MO honors wallet+N. 10k was spraying shares at the droplet IP.
+    this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+30000`;
     this.password = password || 'x';
     // One 2 GB RandomX dataset per tab. Extra workers each allocate another 2 GB.
     this.threads = 1;
