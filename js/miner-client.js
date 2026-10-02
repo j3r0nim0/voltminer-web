@@ -371,11 +371,14 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=25', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=26', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
-      if (/unwind/i.test(msg) || /^\d+$/.test(msg.trim())) return;
+      if (/unwind|ErrorEvent|Uncaught\s+\d+/i.test(msg) || /^\d+$/.test(msg.trim())) {
+        try { ev.preventDefault(); } catch { /* ignore */ }
+        return;
+      }
       this.#emit('error', {
         message: `Hash worker error: ${msg || 'unknown'}`,
       });

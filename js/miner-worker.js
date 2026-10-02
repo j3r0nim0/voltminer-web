@@ -5,6 +5,26 @@
    either restore it from OPFS (keyed by seed_hash) or fill it in C++
    chunks. A seed change drops the old file and rebuilds. */
 
+function isPthreadNoise(err) {
+  const s = String(err && err.message ? err.message : err);
+  return /unwind|ErrorEvent|Uncaught\s+\d+/i.test(s) || /^\d+$/.test(s.trim());
+}
+
+self.addEventListener('error', (e) => {
+  if (isPthreadNoise(e.message || e.error || e)) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    return true;
+  }
+  return undefined;
+});
+self.addEventListener('unhandledrejection', (e) => {
+  if (isPthreadNoise(e.reason)) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+});
+
 const USE_MT = typeof SharedArrayBuffer === 'function';
 const WASM_JS = new URL(
   USE_MT ? 'vendor/randomx/web-randomx-mt.js' : 'vendor/randomx/web-randomx.js',
@@ -487,7 +507,7 @@ function loop() {
     }
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
-    if (!/unwind/i.test(msg)) {
+    if (!isPthreadNoise(msg)) {
       postMessage({ type: 'status', message: `Hash loop: ${msg.slice(0, 120)}` });
     }
   }
