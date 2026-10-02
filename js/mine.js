@@ -191,7 +191,7 @@ const client = new MinerClient((ev) => {
     logLine('hash', `${(ev.hashrate || 0).toFixed(1)} H/s  +${ev.n || 0} hashes  total=${ev.total || 0}  job=${ev.jobId || '—'}${win}`);
   }
   if (ev.type === 'submit') {
-    logLine('job', `submit job=${ev.jobId || ''} nonce=${ev.nonce || ''} result=${String(ev.result || '').slice(0, 16)}… hashDiff=${ev.hashDiff || '?'} jobDiff=${ev.jobDiff || '?'} target=${ev.target || ''} local=${ev.ok ? 'ok' : 'below-target'} nlen=${ev.resultLen || '?'} blob39=${ev.blobNonce || ''}`);
+    logLine('job', `submit job=${ev.jobId || ''} nonce=${ev.nonce || ''} result=${String(ev.result || '').slice(0, 16)}… hashDiff=${ev.hashDiff || '?'} jobDiff=${ev.jobDiff || '?'} target=${ev.target || ''} local=${ev.ok ? 'ok' : 'below-target'} nlen=${ev.resultLen || '?'} blob39=${ev.blobNonce || ''} rev=${ev.resultRev ? '1' : '0'}`);
   }
   if (ev.type === 'accepted') {
     setStatus(`Share accepted (${ev.stats.accepted})`);

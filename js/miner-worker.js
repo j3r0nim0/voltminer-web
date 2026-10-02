@@ -101,7 +101,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=47', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=48', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -446,8 +446,7 @@ function loop() {
       ms: Math.round(performance.now() - tInit),
       n: first.n,
     });
-    dsPhase = 'skip';
-    postMessage({ type: 'status', message: 'Light/cache only (skip 2 GB dataset — isolate submit vs full-mem).' });
+    dsPhase = 'try';
     scheduleLoop(0);
     return;
   }

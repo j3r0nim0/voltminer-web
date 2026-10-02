@@ -57,6 +57,14 @@ export function resultToDiff(resultHex) {
   return d > 0xFFFFFFFFn ? Number(0xFFFFFFFFn) : Number(d);
 }
 
+function reverseHex(hex) {
+  const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
+  if (h.length < 2 || h.length % 2) return h;
+  const out = [];
+  for (let i = 0; i < h.length; i += 2) out.push(h.substr(i, 2));
+  return out.reverse().join('');
+}
+
 export function isValidWallet(address) {
   const s = String(address || '').trim();
   const b58 = '[1-9A-HJ-NP-Za-km-z]';
@@ -417,7 +425,7 @@ export class MinerClient {
     this.#emit('submit', {
       jobId: p.job_id,
       nonce: p.nonce,
-      result: p.result,
+      result: reverseHex(p.result),
       target: this.job.target || '',
       jobDiff,
       hashDiff,
@@ -431,7 +439,7 @@ export class MinerClient {
         id: this.sessionId,
         job_id: p.job_id,
         nonce: p.nonce,
-        result: p.result,
+        result: reverseHex(p.result),
       },
     });
   }
@@ -481,7 +489,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=47', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=48', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
@@ -573,6 +581,7 @@ export class MinerClient {
         jobId: data.job_id,
         nonce: data.nonce,
         result: data.result,
+        resultRev: true,
         resultLen: String(data.result || '').length,
         blobNonce: String(this.job.blob || '').slice(78, 86),
         target: this.job.target || '',
@@ -588,7 +597,7 @@ export class MinerClient {
           id: this.sessionId,
           job_id: data.job_id,
           nonce: data.nonce,
-          result: data.result,
+          result: reverseHex(data.result),
         },
       });
     }
