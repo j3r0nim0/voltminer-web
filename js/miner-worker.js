@@ -101,7 +101,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name, self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=44', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -575,13 +575,12 @@ onmessage = function (e) {
     }
   }
   if (data.type === 'pause') {
-    /* Keep hashing the last job so a pool drop does not hide Wasm OOB.
-       Submits are already gated on an open socket + matching job_id. */
+    hashing = false;
     postMessage({
       type: 'status',
-      message: dsPhase === 'done'
-        ? 'Pool disconnected. Still hashing last job (dataset kept).'
-        : 'Pool disconnected (dataset fill continues if in progress).',
+      message: dsPhase === 'filling' || dsPhase === 'saving' || dsPhase === 'try'
+        ? 'Pool disconnected. Dataset fill continues (no hashes until we are back).'
+        : 'Pool disconnected. Hashing paused (dataset kept).',
     });
   }
   if (data.type === 'resume') {

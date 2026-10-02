@@ -123,6 +123,7 @@ export class MinerClient {
     this.reconnectAttempt = 0;
     this.holdReconnectUntil = 0;
     this.paused = false;
+    this.pendingShare = null;
   }
 
   #emit(type, detail) {
@@ -163,6 +164,7 @@ export class MinerClient {
     this.sessionId = null;
     this.reconnectAttempt = 0;
     this.paused = false;
+    this.pendingShare = null;
     const rawWallet = wallet.trim();
     // Same VarDiff suffix as the APK (MiningService.START_DIFFICULTY = 30000).
     // MO honors wallet+N. 10k was spraying shares at the droplet IP.
@@ -345,6 +347,7 @@ export class MinerClient {
       this.sessionId = result.id || null;
       if (result.job) this.#setJob(result.job);
       else this.#emit('status', { message: 'Logged in. Waiting for a job…' });
+      this.#flushPendingShare();
       return;
     }
     if (this.submitIds.has(obj.id)) {
@@ -355,8 +358,8 @@ export class MinerClient {
         if (kind !== 'probe') this.rejected += 1;
         this.#emit('error', { message: (kind === 'probe' ? 'Probe: ' : 'Share rejected: ') + msg });
         if (/low difficulty/i.test(msg || '')) {
-          this.#emit('status', { message: 'Low difficulty — valid RandomX, below this job’s target. Keep hashing; do not reconnect.' });
-          this.holdReconnectUntil = Date.now() + 10 * 60 * 1000;
+          this.#emit('status', { message: 'Low difficulty — valid RandomX, below this job’s target. Hold 60s, then reconnect.' });
+          this.holdReconnectUntil = Date.now() + 60 * 1000;
           if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
@@ -396,6 +399,41 @@ export class MinerClient {
     for (const wrk of this.workers) {
       wrk.postMessage({ type: 'job', job: this.job });
     }
+  }
+
+  #flushPendingShare() {
+    const p = this.pendingShare;
+    if (!p || !this.connected || !this.sessionId || !this.job) return;
+    if (this.job.job_id !== p.job_id) {
+      this.#emit('status', { message: `Queued share job=${p.job_id} is stale vs ${this.job.job_id} — dropped.` });
+      this.pendingShare = null;
+      return;
+    }
+    this.pendingShare = null;
+    const id = this.#nextId();
+    this.submitIds.set(id, true);
+    const jobDiff = targetToDiff(this.job.target);
+    const hashDiff = resultToDiff(p.result);
+    this.#emit('submit', {
+      jobId: p.job_id,
+      nonce: p.nonce,
+      result: p.result,
+      target: this.job.target || '',
+      jobDiff,
+      hashDiff,
+      ok: hashDiff > 0 && jobDiff > 0 && hashDiff >= jobDiff,
+    });
+    this.#send({
+      id,
+      jsonrpc: '2.0',
+      method: 'submit',
+      params: {
+        id: this.sessionId,
+        job_id: p.job_id,
+        nonce: p.nonce,
+        result: p.result,
+      },
+    });
   }
 
   #pauseWorkers() {
@@ -443,7 +481,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=43', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=44', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
@@ -515,7 +553,12 @@ export class MinerClient {
       this.totalHashes += 1;
       this.windowHashes += 1;
       if (!this.connected || !this.sessionId || !this.job) {
-        this.#emit('status', { message: `Found share for ${data.job_id} but socket is down — not submitting.` });
+        this.pendingShare = {
+          job_id: data.job_id,
+          nonce: data.nonce,
+          result: data.result,
+        };
+        this.#emit('status', { message: `Found share for ${data.job_id} — queued until the pool socket is up.` });
         return;
       }
       if (this.job.job_id !== data.job_id) {
