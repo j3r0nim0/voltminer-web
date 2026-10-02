@@ -147,6 +147,7 @@ function loadWasm() {
 
 let job = null;
 let running = false;
+let looping = false;
 let blobBytes = new Uint8Array(0);
 let seedBytes = new Uint8Array(0);
 let targetBytes = new Uint8Array(4).fill(0xff);
@@ -182,6 +183,7 @@ function heightArgs() {
 function mineBatch(maxHashes) {
   if (!rx || !job || blobLen < 43) return { n: 0, solved: null };
   const hashedJobId = job.job_id;
+  const hashedBlob = job.blob;
   bindHeap();
   rx.blob.fill(0);
   rx.blob.set(blobBytes.subarray(0, Math.min(blobLen, 256)));
@@ -209,6 +211,9 @@ function mineBatch(maxHashes) {
     rx.hashPtr,
   );
   bindHeap();
+  if (job.job_id !== hashedJobId || job.blob !== hashedBlob) {
+    return { n: n | 0, solved: null };
+  }
   const solved = rx.found[0]
     ? { nonceHex: bytesToHex(rx.nonce), result: bytesToHex(rx.hash), job_id: hashedJobId }
     : null;
@@ -406,10 +411,28 @@ function markFullReady(how) {
   });
 }
 
+function scheduleLoop(ms) {
+  if (!running) {
+    looping = false;
+    return;
+  }
+  looping = true;
+  setTimeout(loop, ms || 0);
+}
+
+function kickLoop() {
+  if (!running || looping) return;
+  scheduleLoop(0);
+}
+
 function loop() {
-  if (!running || !job) return;
+  looping = true;
+  if (!running || !job) {
+    looping = false;
+    return;
+  }
   if (!rx) {
-    setTimeout(loop, 1500);
+    scheduleLoop(1500);
     return;
   }
 
@@ -424,7 +447,7 @@ function loop() {
       n: first.n,
     });
     dsPhase = 'try';
-    if (running) setTimeout(loop, 0);
+    kickLoop();
     return;
   }
 
@@ -434,7 +457,7 @@ function loop() {
     if (!ok) {
       dsPhase = 'skip';
       postMessage({ type: 'status', message: 'Dataset alloc failed — staying in light/cache. Fast mode needs ~3 GB free in this tab (Chrome, 16 GB PC).' });
-      if (running) setTimeout(loop, 0);
+      kickLoop();
       return;
     }
     const gen = dsGen;
@@ -446,12 +469,12 @@ function loop() {
       if (gen !== dsGen) return;
       if (hit && dsPhase === 'filling') {
         markFullReady('opfs');
-        if (running) setTimeout(loop, 0);
+        scheduleLoop(0);
       }
     }).catch(() => {
       /* miss or timeout — fill already running */
     });
-    if (running) setTimeout(loop, 0);
+    scheduleLoop(0);
     return;
   }
 
@@ -480,19 +503,23 @@ function loop() {
           } else {
             markFullReady('fill');
           }
-          if (running) setTimeout(loop, 0);
+          scheduleLoop(0);
         });
         return;
       }
     }
-    if (running) setTimeout(loop, 0);
+    scheduleLoop(0);
     return;
   }
 
-  if (dsPhase === 'saving') return;
+  if (dsPhase === 'saving') {
+    looping = false;
+    return;
+  }
 
   if (!hashing) {
-    if (running) setTimeout(loop, 250);
+    scheduleLoop(250);
+    else looping = false;
     return;
   }
 
@@ -526,7 +553,7 @@ function loop() {
       result: solved.result,
     });
   }
-  if (running) setTimeout(loop, 0);
+  scheduleLoop(0);
 }
 
 onmessage = function (e) {
@@ -542,10 +569,10 @@ onmessage = function (e) {
       running = true;
       loadWasm().then((ok) => {
         postMessage({ type: 'ready', wasm: ok });
-        loop();
+        kickLoop();
       });
-    } else if (dsPhase === 'try' || dsPhase === 'idle') {
-      loop();
+    } else {
+      kickLoop();
     }
   }
   if (data.type === 'pause') {
@@ -560,12 +587,8 @@ onmessage = function (e) {
   }
   if (data.type === 'resume') {
     hashing = true;
-    if (!running) {
-      running = true;
-      loop();
-    } else {
-      loop();
-    }
+    running = true;
+    kickLoop();
   }
   if (data.type === 'stop') {
     running = false;
