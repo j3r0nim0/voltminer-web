@@ -5,16 +5,21 @@ TLS stratum to gulf.moneroocean.stream:20032 — RandomX native, DONATE 0%.
 
 This folder holds a compiled WebRandomX (tevador/RandomX → Wasm) build:
 
-  web-randomx.js     Emscripten glue (createWebRandomX, MODULARIZE)
-  web-randomx.wasm   worker binary, INITIAL_MEMORY=272MB (heap, not file size)
+  web-randomx.js     Emscripten glue (createWebRandomX, MODULARIZE, worker)
+  web-randomx.wasm   fast/full-dataset mode. Heap grows toward 3 GB.
+                     Dataset itself is ~2080 MB + extra. One instance per tab.
 
 Built from https://github.com/WebCryptomining/WebRandomX with Emscripten
-4.0.10. CMake link flags were patched so the worker can find the hash
-entry (upstream only exported _malloc/_free):
+4.0.10. web_randomx.cpp forces RANDOMX_FLAG_FULL_MEM and inits the dataset
+on the first hash. Link flags:
 
   -sMODULARIZE=1 -sEXPORT_NAME=createWebRandomX -sENVIRONMENT=worker
-  -sEXPORTED_FUNCTIONS=_malloc,_free,_randomx_hash
-  -sEXPORTED_RUNTIME_METHODS=HEAPU8 -sINITIAL_MEMORY=272MB -sWASM_BIGINT=1
+  -sEXPORTED_FUNCTIONS=_malloc,_free,_randomx_hash,_randomx_is_full_mem
+  -sEXPORTED_RUNTIME_METHODS=HEAPU8
+  -sINITIAL_MEMORY=512MB -sMAXIMUM_MEMORY=3072MB -sALLOW_MEMORY_GROWTH=1
+
+Needs a 16 GB RAM PC to run smoothly. 8 GB will swap or fall back to
+light/cache mode.
 
 License of RandomX / WebRandomX is BSD-3-Clause. Do not hotlink a
 third-party wasm at runtime.

@@ -1,7 +1,6 @@
 import {
   MinerClient,
   isValidWallet,
-  hardwareThreads,
   defaultThreadCount,
   loadOrCreateWorkerId,
 } from './miner-client.js';
@@ -23,13 +22,13 @@ const moLink = $('mo-link');
 document.documentElement.dataset.minerJs = 'ok';
 if ($('js-gate')) $('js-gate').hidden = true;
 
-const maxThreads = hardwareThreads();
 const workerId = loadOrCreateWorkerId();
 
-threadsEl.max = String(maxThreads);
-threadsEl.value = String(defaultThreadCount());
-threadsMax.textContent = `(of ${maxThreads} cores — leave at least one free)`;
-threadsVal.textContent = threadsEl.value;
+threadsEl.max = '1';
+threadsEl.value = '1';
+threadsEl.disabled = true;
+threadsMax.textContent = '(fixed — one 2 GB dataset per tab)';
+threadsVal.textContent = '1';
 $('st-wid').textContent = workerId;
 $('st-wid-inline').textContent = workerId;
 

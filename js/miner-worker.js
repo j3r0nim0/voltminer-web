@@ -1,13 +1,11 @@
 /* RandomX hash worker (experimental).
 
-   If js/vendor/randomx/web-randomx.js is present, we load it and call
-   `_randomx_hash` (WebRandomX / tevador RandomX, light/cache mode).
-   If not, we still speak the job protocol so the UI and bridge can be
-   tested; we never submit fake shares.
+   Fast/full-dataset mode: one Wasm instance maps ~2 GB (RandomX dataset
+   ~2080 MB + scratch). Extra workers do not share that buffer, so the
+   page runs exactly one worker per tab.
 
-   Share check matches XMRig/MoneroOcean: the first 8 bytes of the hash
-   as a little-endian uint64 must be <= the job target. Comparing from
-   the high end of the 32-byte hash never hits a 4-byte MO target. */
+   First _randomx_hash call builds the dataset (can take 1–3 minutes).
+   Later hashes reuse it until the seed changes. */
 
 const WASM_JS = new URL('vendor/randomx/web-randomx.js', self.location).href;
 
@@ -15,6 +13,7 @@ let modulePromise = null;
 let rx = null;
 let nonceBase = (Math.random() * 0x100000000) >>> 0;
 let debugOnce = false;
+let datasetReady = false;
 
 function hexToBytes(hex) {
   const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
@@ -54,6 +53,13 @@ function meetsTarget(output, target) {
   return h <= t64;
 }
 
+function bindHeap() {
+  const heap = rx.module.HEAPU8;
+  rx.input = new Uint8Array(heap.buffer, rx.inputPtr, 256);
+  rx.output = new Uint8Array(heap.buffer, rx.outputPtr, 32);
+  rx.seed = new Uint8Array(heap.buffer, rx.seedPtr, 32);
+}
+
 function loadWasm() {
   if (modulePromise) return modulePromise;
   modulePromise = (async () => {
@@ -82,10 +88,18 @@ function loadWasm() {
       });
       const hashFn = module._randomx_hash;
       if (typeof hashFn !== 'function') throw new Error('_randomx_hash not exported');
-      const input = new Uint8Array(module.HEAPU8.buffer, module._malloc(256), 256);
-      const output = new Uint8Array(module.HEAPU8.buffer, module._malloc(32), 32);
-      const seed = new Uint8Array(module.HEAPU8.buffer, module._malloc(32), 32);
-      rx = { module, hashFn, input, output, seed };
+      const inputPtr = module._malloc(256);
+      const outputPtr = module._malloc(32);
+      const seedPtr = module._malloc(32);
+      rx = {
+        module,
+        hashFn,
+        isFull: module._randomx_is_full_mem,
+        inputPtr,
+        outputPtr,
+        seedPtr,
+      };
+      bindHeap();
       return true;
     } catch (err) {
       rx = null;
@@ -109,6 +123,7 @@ function setJob(next) {
 
 function hashOnce() {
   if (!rx || !job) return null;
+  bindHeap();
   const blob = hexToBytes(job.blob);
   if (blob.length < 43) return null;
   rx.input.fill(0);
@@ -125,19 +140,22 @@ function hashOnce() {
   rx.input[42] = nonce & 0xff;
 
   const height = BigInt(job.height || 0);
-  rx.hashFn(height, height, rx.seed.byteOffset, rx.input.byteOffset, blob.length, rx.output.byteOffset);
+  rx.hashFn(height, height, rx.seedPtr, rx.inputPtr, blob.length, rx.outputPtr);
+  bindHeap();
 
   const nonceHex = bytesToHex(rx.input.subarray(39, 43));
   const result = bytesToHex(rx.output.subarray(0, 32));
   const ok = meetsTarget(rx.output.subarray(0, 32), targetBytes);
   if (!debugOnce) {
     debugOnce = true;
+    const full = rx.isFull ? !!rx.isFull() : false;
     postMessage({
       type: 'debug',
       nonceHex,
       result,
       target: job.target,
       ok,
+      full,
       h64: bytesToHex(rx.output.subarray(0, 8)),
     });
   }
@@ -148,6 +166,21 @@ function loop() {
   if (!running || !job) return;
   if (!rx) {
     setTimeout(loop, 1500);
+    return;
+  }
+  if (!datasetReady) {
+    postMessage({ type: 'status', message: 'Building RandomX dataset (~2 GB). First hash can take 1–3 minutes. Do not close the tab.' });
+    const tInit = performance.now();
+    hashOnce();
+    bindHeap();
+    const full = rx.isFull ? !!rx.isFull() : false;
+    datasetReady = true;
+    postMessage({
+      type: 'dataset',
+      full,
+      ms: Math.round(performance.now() - tInit),
+    });
+    if (running) setTimeout(loop, 0);
     return;
   }
   const t0 = performance.now();

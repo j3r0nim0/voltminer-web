@@ -32,8 +32,8 @@ export function hardwareThreads() {
 }
 
 export function defaultThreadCount() {
-  const max = hardwareThreads();
-  return Math.max(1, Math.min(max - 1, Math.floor(max / 2)));
+  // Fast-mode dataset is ~2 GB and is not shared across Workers.
+  return 1;
 }
 
 export function loadOrCreateWorkerId() {
@@ -114,8 +114,8 @@ export class MinerClient {
     // MO start-diff is wallet+N (password d=N is ignored). Floor is 10000.
     this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+10000`;
     this.password = password || 'x';
-    // Each RandomX worker maps 272MB. More than 2 tabs the machine into swap.
-    this.threads = Math.max(1, Math.min(4, hardwareThreads(), threads | 0 || 1));
+    // One 2 GB RandomX dataset per tab. Extra workers each allocate another 2 GB.
+    this.threads = 1;
     this.bridgeUrl = url;
     this.#spawnWorkers(this.threads);
     this.#connect();
@@ -135,11 +135,10 @@ export class MinerClient {
     this.#emit('status', { message: 'Connecting to bridge…' });
   }
 
-  setThreads(n) {
-    const target = Math.max(1, Math.min(hardwareThreads(), n | 0));
-    this.threads = target;
-    while (this.workers.length < target) this.#addWorker();
-    while (this.workers.length > target) this.#removeWorker();
+  setThreads(_n) {
+    this.threads = 1;
+    while (this.workers.length > 1) this.#removeWorker();
+    if (this.workers.length === 0) this.#addWorker();
     this.#broadcastJob();
     this.#emit('stats', {});
   }
@@ -315,14 +314,26 @@ export class MinerClient {
     if (!this.wantRun) return;
     if (!data || typeof data !== 'object') return;
     if (data.type === 'debug') {
-      this.#emit('status', { message: `hash sample ${String(data.result || '').slice(0, 16)}… target ${data.target} ok=${data.ok}` });
+      this.#emit('status', { message: `hash sample ${String(data.result || '').slice(0, 16)}… target ${data.target} ok=${data.ok} full=${data.full}` });
+      return;
+    }
+    if (data.type === 'status' && data.message) {
+      this.#emit('status', { message: data.message });
+      return;
+    }
+    if (data.type === 'dataset') {
+      this.#emit('status', {
+        message: data.full
+          ? `RandomX fast mode ready (${(data.ms / 1000).toFixed(1)}s dataset). ~2 GB in this tab.`
+          : `RandomX fell back to light/cache mode (${(data.ms / 1000).toFixed(1)}s). Need ~3 GB free RAM for fast mode.`,
+      });
       return;
     }
     if (data.type === 'ready') {
       this.wasmReady = !!data.wasm;
       this.#emit('status', {
         message: data.wasm
-          ? 'RandomX Wasm ready.'
+          ? 'RandomX Wasm loaded. Building dataset next…'
           : 'RandomX Wasm missing — hard-refresh (Cmd-Shift-R); the worker could not load web-randomx.js.',
       });
       return;
