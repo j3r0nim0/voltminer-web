@@ -101,7 +101,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=45', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=46', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });

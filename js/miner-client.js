@@ -49,9 +49,9 @@ export function targetToDiff(targetHex) {
 /** Implied difficulty of a 32-byte RandomX result hex (first 8 bytes LE). */
 export function resultToDiff(resultHex) {
   const h = hexToBytes(resultHex);
-  if (h.length < 8) return 0;
+  if (h.length < 32) return 0;
   let u = 0n;
-  for (let i = 0; i < 8; i++) u |= BigInt(h[i]) << BigInt(8 * i);
+  for (let i = 0; i < 8; i++) u |= BigInt(h[24 + i]) << BigInt(8 * i);
   if (u === 0n) return 0;
   const d = 0xFFFFFFFFFFFFFFFFn / u;
   return d > 0xFFFFFFFFn ? Number(0xFFFFFFFFn) : Number(d);
@@ -481,7 +481,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=45', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=46', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
