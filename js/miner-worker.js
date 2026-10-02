@@ -519,7 +519,6 @@ function loop() {
 
   if (!hashing) {
     scheduleLoop(250);
-    else looping = false;
     return;
   }
 
