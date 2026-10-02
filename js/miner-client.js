@@ -20,6 +20,43 @@ export function defaultBridgeUrl() {
   return PROD_BRIDGE_WS;
 }
 
+export function hexToBytes(hex) {
+  const s = String(hex || '').replace(/[^0-9a-f]/gi, '');
+  const n = s.length >> 1;
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
+  return out;
+}
+
+/** XMRig-style difficulty from a stratum target hex (4-byte or 8-byte LE). */
+export function targetToDiff(targetHex) {
+  const t = hexToBytes(targetHex);
+  if (t.length < 4) return 0;
+  let t64 = 0n;
+  if (t.length >= 8) {
+    for (let i = 0; i < 8; i++) t64 |= BigInt(t[i]) << BigInt(8 * i);
+  } else {
+    let tmp = 0n;
+    for (let i = 0; i < 4; i++) tmp |= BigInt(t[i]) << BigInt(8 * i);
+    if (tmp === 0n) return 0;
+    t64 = 0xFFFFFFFFFFFFFFFFn / (0xFFFFFFFFn / tmp);
+  }
+  if (t64 === 0n) return 0;
+  const d = 0xFFFFFFFFFFFFFFFFn / t64;
+  return d > 0xFFFFFFFFn ? Number(0xFFFFFFFFn) : Number(d);
+}
+
+/** Implied difficulty of a 32-byte RandomX result hex (first 8 bytes LE). */
+export function resultToDiff(resultHex) {
+  const h = hexToBytes(resultHex);
+  if (h.length < 8) return 0;
+  let u = 0n;
+  for (let i = 0; i < 8; i++) u |= BigInt(h[i]) << BigInt(8 * i);
+  if (u === 0n) return 0;
+  const d = 0xFFFFFFFFFFFFFFFFn / u;
+  return d > 0xFFFFFFFFn ? Number(0xFFFFFFFFn) : Number(d);
+}
+
 export function isValidWallet(address) {
   const s = String(address || '').trim();
   const b58 = '[1-9A-HJ-NP-Za-km-z]';
@@ -332,7 +369,14 @@ export class MinerClient {
     };
     this.#resumeWorkers();
     this.#broadcastJob();
-    this.#emit('job', { jobId: job.job_id, algo });
+    const diff = targetToDiff(job.target);
+    this.#emit('job', {
+      jobId: job.job_id,
+      algo,
+      height: job.height || 0,
+      target: job.target || '',
+      diff,
+    });
   }
 
   #broadcastJob() {
@@ -387,7 +431,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=35', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=36', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
@@ -468,10 +512,16 @@ export class MinerClient {
       }
       const id = this.#nextId();
       this.submitIds.set(id, true);
+      const jobDiff = targetToDiff(this.job.target);
+      const hashDiff = resultToDiff(data.result);
       this.#emit('submit', {
         jobId: data.job_id,
         nonce: data.nonce,
         result: data.result,
+        target: this.job.target || '',
+        jobDiff,
+        hashDiff,
+        ok: hashDiff > 0 && jobDiff > 0 && hashDiff >= jobDiff,
       });
       this.#send({
         id,

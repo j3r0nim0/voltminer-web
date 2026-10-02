@@ -144,16 +144,16 @@ const client = new MinerClient((ev) => {
     logLine('err', ev.message);
   }
   if (ev.type === 'job') {
-    const line = `job ${ev.jobId || ''} algo=${ev.algo || 'rx/0'}`;
+    const line = `job ${ev.jobId || ''} algo=${ev.algo || 'rx/0'} diff=${ev.diff || '?'} height=${ev.height || '?'} target=${ev.target || ''}`;
     logLine('job', line);
-    if (!filling) setStatus(`Job ${ev.jobId || ''} (${ev.algo || 'rx/0'})`);
+    if (!filling) setStatus(`Job ${ev.jobId || ''} (${ev.algo || 'rx/0'}) diff ${ev.diff || '?'}`);
   }
   if (ev.type === 'tick') {
     const dt = ev.dt ? `  ${ev.dt.toFixed(1)}s` : '';
     logLine('hash', `${(ev.hashrate || 0).toFixed(1)} H/s  +${ev.n || 0} hashes  total=${ev.total || 0}  job=${ev.jobId || '—'}${dt}`);
   }
   if (ev.type === 'submit') {
-    logLine('job', `submit job=${ev.jobId || ''} nonce=${ev.nonce || ''} result=${String(ev.result || '').slice(0, 16)}…`);
+    logLine('job', `submit job=${ev.jobId || ''} nonce=${ev.nonce || ''} result=${String(ev.result || '').slice(0, 16)}… hashDiff=${ev.hashDiff || '?'} jobDiff=${ev.jobDiff || '?'} target=${ev.target || ''} local=${ev.ok ? 'ok' : 'below-target'}`);
   }
   if (ev.type === 'accepted') {
     setStatus(`Share accepted (${ev.stats.accepted})`);
