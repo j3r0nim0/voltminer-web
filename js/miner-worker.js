@@ -495,12 +495,19 @@ onmessage = function (e) {
   }
   if (data.type === 'pause') {
     hashing = false;
-    postMessage({ type: 'status', message: 'Hashing paused (dataset fill continues if in progress).' });
+    postMessage({
+      type: 'status',
+      message: dsPhase === 'done'
+        ? 'Hashing paused. Dataset kept in this tab.'
+        : 'Hashing paused (dataset fill continues if in progress).',
+    });
   }
   if (data.type === 'resume') {
     hashing = true;
     if (!running) {
       running = true;
+      loop();
+    } else {
       loop();
     }
   }

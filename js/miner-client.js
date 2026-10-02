@@ -189,8 +189,8 @@ export class MinerClient {
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
-    this.#killWorkers();
-    if (!silent) this.#emit('status', { message: 'Stopped.' });
+    this.#pauseWorkers();
+    if (!silent) this.#emit('status', { message: 'Stopped. Dataset kept in this tab — Start again to skip the 6 min fill.' });
   }
 
   #nextId() {
@@ -356,12 +356,16 @@ export class MinerClient {
   }
 
   #spawnWorkers(n) {
+    if (this.workers.length >= 1) {
+      this.#resumeWorkers();
+      return;
+    }
     this.#killWorkers();
     for (let i = 0; i < n; i++) this.#addWorker();
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=22', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=23', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       this.#emit('error', {
