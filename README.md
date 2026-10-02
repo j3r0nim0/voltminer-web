@@ -26,4 +26,14 @@ Loopback is already allowed by the bridge.
 
 ## Wasm
 
-`js/vendor/randomx/web-randomx.{js,wasm}` are gitignored. Without them the page can log in via the bridge and will not submit shares. See that folder's `NOTICE.txt`.
+`js/vendor/randomx/web-randomx-mt.{js,wasm}` (and the ST pair) are **committed**. Rebuild from `third_party/WebRandomX-overlay/` on WebCryptomining/WebRandomX `780908a`. NOTICE.txt in that folder.
+
+## Source of truth (not only the live site)
+
+| Path | What |
+|---|---|
+| `js/` `index.html` | Miner UI (GitHub Pages / `web.voltminer.net`) |
+| `js/vendor/randomx/*.wasm` | Built binaries |
+| `third_party/WebRandomX-overlay/` | C++ we actually compile (not upstream alone) |
+| `tools/web-stratum-bridge/` | VPS hop `wss://bridge.voltminer.net` → gulf:20032 |
+| `tools/rx-replay/` | Offline native vs Wasm hash (does not mine) |

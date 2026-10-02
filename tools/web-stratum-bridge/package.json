@@ -1,0 +1,16 @@
+{
+  "name": "voltminer-web-stratum-bridge",
+  "private": true,
+  "type": "module",
+  "description": "Origin-locked WebSocket → TLS TCP stratum bridge for the VoltMiner /mine experiment. Not a Cloudflare Worker.",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test origin.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

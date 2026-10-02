@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>rx mine-vs-hash</title></head>
+<body>
+<pre id="out">running…</pre>
+<script>
+const SEED = '427164010fb682d0b40f88c78427b40a4cec9712b21c51c42ae8a6c955d2dca1';
+const BLOB = '1010d083ffd506f915d344a68aa9181fc720ba4f7b8f0d9828167736d64f9fc227a98d33b0b3940000000086d42a145f6bb688651418686b3c9703c1fc633ec0a1ec93dfa7d844ad12b87453';
+const HEIGHT = 3775316n;
+
+const out = document.getElementById('out');
+const lines = [];
+function say(s) { lines.push(s); out.textContent = lines.join('\n'); }
+
+function fromHex(s) {
+  const h = String(s).replace(/[^0-9a-f]/gi, '');
+  const o = new Uint8Array(h.length / 2);
+  for (let i = 0; i < o.length; i++) o[i] = parseInt(h.substr(i * 2, 2), 16);
+  return o;
+}
+function toHex(u8) { return Array.from(u8, (b) => b.toString(16).padStart(2, '0')).join(''); }
+
+async function loadRx() {
+  const url = new URL('js/vendor/randomx/web-randomx-mt.js', location.href).href;
+  const src = await (await fetch(url, { cache: 'no-store' })).text();
+  const prev = self.Module;
+  const factory = await new Promise((resolve, reject) => {
+    try { (0, eval)(src + '\n//# sourceURL=web-randomx-mt.js'); } catch (e) { reject(e); return; }
+    const cand = self.createWebRandomX || self.Module;
+    if (typeof cand === 'function') resolve(cand); else reject(new Error('no factory'));
+    self.Module = prev;
+  });
+  return factory({
+    locateFile(p) { return new URL('js/vendor/randomx/' + p.split('/').pop() + '?v=50', location.href).href; },
+    mainScriptUrlOrBlob: url,
+  });
+}
+
+(async () => {
+  say('crossOriginIsolated=' + (globalThis.crossOriginIsolated === true) + ' sab=' + (typeof SharedArrayBuffer === 'function'));
+  const M = await loadRx();
+  say('module loaded, mine=' + typeof M._randomx_mine + ' hash=' + typeof M._randomx_hash + ' setThreads=' + typeof M._randomx_set_threads);
+
+  const seed = fromHex(SEED);
+  const baseBlob = fromHex(BLOB);
+  const seedPtr = M._malloc(32);
+  const blobPtr = M._malloc(256);
+  const targetPtr = M._malloc(8);
+  const noncePtr = M._malloc(4);
+  const hashPtr = M._malloc(32);
+  const foundPtr = M._malloc(4);
+
+  function heap() { return M.HEAPU8; }
+  function putSeed() { heap().set(seed, seedPtr); }
+  function putBlob(b) { heap().fill(0, blobPtr, blobPtr + 256); heap().set(b, blobPtr); }
+
+  function hashOf(blobBytes, nonceLe) {
+    const b = blobBytes.slice();
+    b.set(nonceLe, 39);
+    putSeed();
+    putBlob(b);
+    const ok = M._randomx_hash(HEIGHT, HEIGHT, seedPtr, blobPtr, b.length, hashPtr);
+    return { ok, hash: toHex(heap().slice(hashPtr, hashPtr + 32)), blobHex: toHex(b) };
+  }
+
+  async function mineTest(label, threads, targetBytes, startNonce, maxHashes) {
+    M._randomx_set_threads(threads);
+    // give pthread pool a moment to exist
+    await new Promise((r) => setTimeout(r, 300));
+    putSeed();
+    putBlob(baseBlob);
+    heap().fill(0, targetPtr, targetPtr + 8);
+    heap().set(targetBytes, targetPtr);
+    heap().set([0, 0, 0, 0], foundPtr);
+    heap().set([0, 0, 0, 0], noncePtr);
+    heap().set(new Uint8Array(32), hashPtr);
+    const t0 = performance.now();
+    const n = M._randomx_mine(
+      HEIGHT, HEIGHT, seedPtr, blobPtr, baseBlob.length,
+      startNonce, maxHashes, targetPtr, targetBytes.length,
+      foundPtr, noncePtr, hashPtr,
+    );
+    const ms = performance.now() - t0;
+    const found = heap()[foundPtr];
+    const nonceLe = heap().slice(noncePtr, noncePtr + 4);
+    const mineHash = toHex(heap().slice(hashPtr, hashPtr + 32));
+    if (!found) { say(`${label}: n=${n} found=0 (${ms.toFixed(0)}ms) — no solution, cannot cross-check`); return null; }
+    const expectNonceLe = new Uint8Array([startNonce & 0xff, (startNonce >> 8) & 0xff, (startNonce >> 16) & 0xff, (startNonce >>> 24) & 0xff]);
+    const h = hashOf(baseBlob, nonceLe);
+    const r = {
+      label, threads, n, ms: Math.round(ms),
+      mineNonce: toHex(nonceLe),
+      expectNonce: toHex(expectNonceLe),
+      mineHash,
+      hashOfNonce: h.hash,
+      match: mineHash === h.hash,
+    };
+    say(`${label}\n  n=${r.n} ${r.ms}ms\n  mine nonce =${r.mineNonce}\n  exp  nonce =${r.expectNonce}\n  mine result=${r.mineHash}\n  hash(nonce)=${r.hashOfNonce}\n  MATCH ${r.match ? 'YES' : 'NO'}`);
+    return r;
+  }
+
+  const results = [];
+  // accept-all target: diff 1, every hash qualifies -> check plumbing instantly
+  results.push(await mineTest('T1 threads=1 target=ffffffff max=1', 1, new Uint8Array([0xff, 0xff, 0xff, 0xff]), 0x00000001, 1));
+  results.push(await mineTest('T2 threads=2 target=ffffffff max=64', 2, new Uint8Array([0xff, 0xff, 0xff, 0xff]), 0x00000001, 64));
+  results.push(await mineTest('T3 threads=4 target=ffffffff max=128', 4, new Uint8Array([0xff, 0xff, 0xff, 0xff]), 0x11223344, 128));
+  results.push(await mineTest('T4 threads=2 target=ffffffff max=1', 2, new Uint8Array([0xff, 0xff, 0xff, 0xff]), 0xaabbccdd, 1));
+  // the real job target b88d0600 (10000) — may take a while
+  results.push(await mineTest('T5 threads=2 target=b88d0600 (real 10k) max=200000', 2, fromHex('b88d0600'), 0x5a5a5a5a, 200000));
+
+  // independent: hash a fixed nonce for native comparison
+  const fixed = hashOf(baseBlob, new Uint8Array([0x00, 0x00, 0x00, 0x00]));
+  say('native-compare blob=' + fixed.blobHex + ' nonce=00000000 hash=' + fixed.hash);
+  const fixed2 = hashOf(baseBlob, new Uint8Array([0xdd, 0xcc, 0xbb, 0xaa]));
+  say('native-compare nonce=ddccbbaa hash=' + fixed2.hash);
+
+  window.__RXRESULT = JSON.stringify({ results, fixed: fixed.hash, fixed2: fixed2.hash, done: true });
+  say('DONE');
+})().catch((e) => { say('ERROR ' + (e && e.stack || e)); window.__RXRESULT = JSON.stringify({ error: String(e), done: true }); });
+</script>
+</body>
+</html>
