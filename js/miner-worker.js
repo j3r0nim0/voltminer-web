@@ -14,6 +14,7 @@ let nonceBase = (Math.random() * 0x100000000) >>> 0;
 let lightReady = false;
 let dsPhase = 'idle'; // idle | filling | done | skip
 let lastPct = -1;
+let hashing = true; // pause stops hashes, not dataset fill
 
 function hexToBytes(hex) {
   const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
@@ -246,6 +247,11 @@ function loop() {
     return;
   }
 
+  if (!hashing) {
+    if (running) setTimeout(loop, 250);
+    return;
+  }
+
   const t0 = performance.now();
   let n = 0;
   let solved = null;
@@ -281,15 +287,20 @@ onmessage = function (e) {
     }
   }
   if (data.type === 'pause') {
-    running = false;
+    hashing = false;
+    postMessage({ type: 'status', message: 'Hashing paused (dataset fill continues if in progress).' });
   }
   if (data.type === 'resume') {
+    hashing = true;
     if (!running) {
       running = true;
       loop();
     }
   }
-  if (data.type === 'stop') running = false;
+  if (data.type === 'stop') {
+    running = false;
+    hashing = false;
+  }
 };
 
 loadWasm().then((ok) => postMessage({ type: 'ready', wasm: ok }));

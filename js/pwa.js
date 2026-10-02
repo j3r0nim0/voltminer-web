@@ -9,4 +9,5 @@
   if (window.caches && caches.keys) {
     caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).catch(() => {});
   }
+  try { localStorage.removeItem('voltminer.web.sw'); } catch { /* ignore */ }
 })();
