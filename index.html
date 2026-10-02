@@ -47,8 +47,8 @@
           <li><strong>You start it.</strong> Nothing hashes until you press Start. Closing the tab stops it.</li>
           <li><strong>Your wallet, your coins.</strong> The address goes to the pool as the stratum login. VoltMiner never holds XMR.</li>
           <li><strong>Ad-blockers will fight this.</strong> uBlock Origin and some antivirus flag Wasm miners even with consent. Pause them on this page or the WebSocket never opens.</li>
-          <li><strong>Safari is a bad host.</strong> Use Chrome or Firefox on desktop. Safari often cannot grow a 272 MB Wasm heap and the worker stays silent.</li>
-          <li><strong>Light/cache only.</strong> A 2 GB fast-mode dataset never finished in-browser (Chrome sat 75s+ with 0 H/s). This page uses ~272 MB interpreted RandomX. A phone running native XMRig will beat it.</li>
+          <li><strong>Chrome, not Safari.</strong> Fast mode grows Wasm toward ~3 GB. Safari often cannot. Use a 16 GB PC and close other tabs.</li>
+          <li><strong>Chunked dataset.</strong> Light/cache hashes immediately. Then we try to fill the ~2 GB RandomX dataset in small steps (progress in the log). If alloc fails, we stay in light mode. A phone running native XMRig will still beat interpreted Wasm.</li>
           <li><strong>Leave the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can IP-ban the bridge for 10 minutes.</li>
           <li><strong>RandomX in a tab, not XMRig.</strong> Same algo family as the APK (<code>rx/0</code>), no huge pages, no JIT. The Android app will always win on the same machine.</li>
           <li><strong>Needs the VPS bridge.</strong> Production is <code>wss://bridge.voltminer.net</code> on DigitalOcean. Not a Cloudflare Worker.</li>
@@ -113,7 +113,7 @@
     </div>
   </footer>
 
-  <script src="js/pwa.js?v=14"></script>
-  <script type="module" src="js/mine.js?v=14"></script>
+  <script src="js/pwa.js?v=15"></script>
+  <script type="module" src="js/mine.js?v=15"></script>
 </body>
 </html>

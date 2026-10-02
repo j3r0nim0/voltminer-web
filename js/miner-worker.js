@@ -1,18 +1,19 @@
 /* RandomX hash worker (experimental).
 
-   Fast/full-dataset interpreted RandomX in Wasm. JIT is not available
-   in the browser (CompiledVm::execute is empty). The inner nonce loop
-   runs in C++ (`_randomx_mine`) so JS is not on the hash path.
-
-   First call builds the ~2 GB dataset (1–3 min). Extra workers would
-   each allocate another 2 GB — the page runs exactly one. */
+   JIT is not available in Wasm (CompiledVm::execute is empty).
+   We hash in light/cache immediately, then try to fill the ~2 GB
+   dataset in small C++ chunks so the worker can yield and the tab
+   stays alive. If alloc fails, we stay in light mode. */
 
 const WASM_JS = new URL('vendor/randomx/web-randomx.js', self.location).href;
+const DS_CHUNK = 131072; // ~8 MB of dataset items per step
 
 let modulePromise = null;
 let rx = null;
 let nonceBase = (Math.random() * 0x100000000) >>> 0;
-let datasetReady = false;
+let lightReady = false;
+let dsPhase = 'idle'; // idle | filling | done | skip
+let lastPct = -1;
 
 function hexToBytes(hex) {
   const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
@@ -63,16 +64,16 @@ function loadWasm() {
           return new URL('vendor/randomx/' + name, self.location).href;
         },
       });
-      const mineFn = module._randomx_mine;
-      const hashFn = module._randomx_hash;
-      if (typeof mineFn !== 'function' && typeof hashFn !== 'function') {
-        throw new Error('_randomx_mine/_randomx_hash not exported');
+      if (typeof module._randomx_mine !== 'function') {
+        throw new Error('_randomx_mine not exported');
       }
       rx = {
         module,
-        mineFn,
-        hashFn,
+        mineFn: module._randomx_mine,
         isFull: module._randomx_is_full_mem,
+        dsBegin: module._randomx_dataset_begin,
+        dsStep: module._randomx_dataset_step,
+        dsPct: module._randomx_dataset_percent,
         blobPtr: module._malloc(256),
         seedPtr: module._malloc(32),
         targetPtr: module._malloc(8),
@@ -108,6 +109,11 @@ function setJob(next) {
   targetBytes = t.length ? t : new Uint8Array(4).fill(0xff);
 }
 
+function heightArgs() {
+  const height = BigInt(job.height || 0);
+  return height;
+}
+
 function mineBatch(maxHashes) {
   if (!rx || !job || blobLen < 43) return { n: 0, solved: null };
   bindHeap();
@@ -121,7 +127,7 @@ function mineBatch(maxHashes) {
 
   const start = nonceBase;
   nonceBase = (nonceBase + maxHashes) >>> 0;
-  const height = BigInt(job.height || 0);
+  const height = heightArgs();
   const n = rx.mineFn(
     height,
     height,
@@ -143,33 +149,108 @@ function mineBatch(maxHashes) {
   return { n: n | 0, solved };
 }
 
+function tryDatasetBegin() {
+  if (!rx || !rx.dsBegin || !job) return false;
+  bindHeap();
+  rx.seed.fill(0);
+  if (seedBytes.length) rx.seed.set(seedBytes.subarray(0, Math.min(32, seedBytes.length)));
+  const height = heightArgs();
+  try {
+    const ok = rx.dsBegin(height, height, rx.seedPtr);
+    bindHeap();
+    return !!ok;
+  } catch (err) {
+    console.warn('dataset begin failed', err.message || err);
+    bindHeap();
+    return false;
+  }
+}
+
+function datasetStep() {
+  bindHeap();
+  try {
+    const pct = rx.dsStep(DS_CHUNK);
+    bindHeap();
+    return pct | 0;
+  } catch (err) {
+    console.warn('dataset step failed', err.message || err);
+    bindHeap();
+    return -1;
+  }
+}
+
 function loop() {
   if (!running || !job) return;
   if (!rx) {
     setTimeout(loop, 1500);
     return;
   }
-  if (!datasetReady) {
-    postMessage({ type: 'status', message: 'Init RandomX light/cache (~272 MB). First hash should be seconds, not minutes.' });
+
+  if (!lightReady) {
     const tInit = performance.now();
     const first = mineBatch(1);
-    bindHeap();
-    const full = rx.isFull ? !!rx.isFull() : false;
-    datasetReady = true;
+    lightReady = true;
     postMessage({
       type: 'dataset',
-      full,
+      full: false,
       ms: Math.round(performance.now() - tInit),
       n: first.n,
     });
+    dsPhase = 'try';
     if (running) setTimeout(loop, 0);
     return;
   }
+
+  if (dsPhase === 'try') {
+    postMessage({ type: 'status', message: 'Trying ~2 GB dataset alloc (chunked). Tab will keep hashing if this fails.' });
+    const ok = tryDatasetBegin();
+    if (!ok) {
+      dsPhase = 'skip';
+      postMessage({ type: 'status', message: 'Dataset alloc failed — staying in light/cache. Fast mode needs ~3 GB free in this tab (Chrome, 16 GB PC).' });
+    } else {
+      dsPhase = 'filling';
+      postMessage({ type: 'status', message: 'Dataset allocated. Filling in chunks (progress below). Hashing pauses until 100%.' });
+    }
+    if (running) setTimeout(loop, 0);
+    return;
+  }
+
+  if (dsPhase === 'filling') {
+    const t0 = performance.now();
+    let pct = lastPct;
+    while (performance.now() - t0 < 350) {
+      pct = datasetStep();
+      if (pct < 0) {
+        dsPhase = 'skip';
+        postMessage({ type: 'status', message: 'Dataset fill aborted — staying in light/cache.' });
+        break;
+      }
+      if (pct !== lastPct) {
+        lastPct = pct;
+        postMessage({ type: 'ds', pct });
+      }
+      if (pct >= 100) {
+        dsPhase = 'done';
+        postMessage({
+          type: 'dataset',
+          full: true,
+          ms: 0,
+          n: 0,
+        });
+        postMessage({ type: 'status', message: 'RandomX fast/full dataset ready. Hashing with full mem.' });
+        break;
+      }
+    }
+    if (running) setTimeout(loop, 0);
+    return;
+  }
+
   const t0 = performance.now();
   let n = 0;
   let solved = null;
+  const batch = dsPhase === 'done' ? 8 : 4;
   while (performance.now() - t0 < 400) {
-    const r = mineBatch(4);
+    const r = mineBatch(batch);
     n += r.n;
     if (r.solved) { solved = r.solved; break; }
     if (!r.n) break;

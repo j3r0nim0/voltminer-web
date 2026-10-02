@@ -354,11 +354,15 @@ export class MinerClient {
       this.#emit('status', { message: data.message });
       return;
     }
+    if (data.type === 'ds') {
+      this.#emit('status', { message: `Dataset fill ${data.pct}%` });
+      return;
+    }
     if (data.type === 'dataset') {
       this.#emit('status', {
         message: data.full
-          ? `RandomX fast mode ready (${(data.ms / 1000).toFixed(1)}s).`
-          : `RandomX light/cache ready (${(data.ms / 1000).toFixed(1)}s). Interpreted Wasm — phone XMRig will beat this.`,
+          ? 'RandomX fast/full dataset ready. Hashing with full mem.'
+          : `RandomX light/cache ready (${(data.ms / 1000).toFixed(1)}s). Will try chunked 2 GB dataset next.`,
       });
       return;
     }
