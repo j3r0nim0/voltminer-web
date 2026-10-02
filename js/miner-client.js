@@ -51,19 +51,12 @@ export function resultToDiff(resultHex) {
   const h = hexToBytes(resultHex);
   if (h.length < 32) return 0;
   let u = 0n;
-  for (let i = 0; i < 8; i++) u |= BigInt(h[24 + i]) << BigInt(8 * i);
+  for (let i = 0; i < 32; i++) u |= BigInt(h[i]) << BigInt(8 * i);
   if (u === 0n) return 0;
   const d = 0xFFFFFFFFFFFFFFFFn / u;
   return d > 0xFFFFFFFFn ? Number(0xFFFFFFFFn) : Number(d);
 }
 
-function reverseHex(hex) {
-  const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
-  if (h.length < 2 || h.length % 2) return h;
-  const out = [];
-  for (let i = 0; i < h.length; i += 2) out.push(h.substr(i, 2));
-  return out.reverse().join('');
-}
 
 export function isValidWallet(address) {
   const s = String(address || '').trim();
@@ -425,7 +418,7 @@ export class MinerClient {
     this.#emit('submit', {
       jobId: p.job_id,
       nonce: p.nonce,
-      result: reverseHex(p.result),
+      result: p.result,
       target: this.job.target || '',
       jobDiff,
       hashDiff,
@@ -439,7 +432,7 @@ export class MinerClient {
         id: this.sessionId,
         job_id: p.job_id,
         nonce: p.nonce,
-        result: reverseHex(p.result),
+        result: p.result,
       },
     });
   }
@@ -489,7 +482,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=48', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=49', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
@@ -597,7 +590,7 @@ export class MinerClient {
           id: this.sessionId,
           job_id: data.job_id,
           nonce: data.nonce,
-          result: reverseHex(data.result),
+          result: data.result,
         },
       });
     }
