@@ -32,7 +32,7 @@ if ($('js-gate')) $('js-gate').hidden = true;
 const workerId = loadOrCreateWorkerId();
 
 if (canShareDataset()) {
-  const max = Math.max(1, Math.min(8, hardwareThreads()));
+  const max = Math.max(1, Math.min(4, hardwareThreads()));
   const def = defaultThreadCount();
   threadsEl.max = String(max);
   threadsEl.value = String(def);

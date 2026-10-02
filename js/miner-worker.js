@@ -558,7 +558,7 @@ function loop() {
 onmessage = function (e) {
   const data = e.data || {};
   if (data.type === 'threads') {
-    cpuThreads = Math.max(1, Math.min(8, data.n | 0 || 1));
+    cpuThreads = Math.max(1, Math.min(4, data.n | 0 || 1));
     if (rx && typeof rx.setThreads === 'function') rx.setThreads(cpuThreads);
     postMessage({ type: 'status', message: `C++ threads set to ${cpuThreads} (shared dataset).` });
   }
