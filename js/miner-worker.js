@@ -65,12 +65,14 @@ function seedHex() {
 
 function bindHeap() {
   const heap = rx.module.HEAPU8;
-  rx.blob = new Uint8Array(heap.buffer, rx.blobPtr, 256);
-  rx.seed = new Uint8Array(heap.buffer, rx.seedPtr, 32);
-  rx.target = new Uint8Array(heap.buffer, rx.targetPtr, 8);
-  rx.nonce = new Uint8Array(heap.buffer, rx.noncePtr, 4);
-  rx.hash = new Uint8Array(heap.buffer, rx.hashPtr, 32);
-  rx.found = new Int32Array(heap.buffer, rx.foundPtr, 1);
+  if (!heap) return;
+  const buf = heap.buffer;
+  rx.blob = new Uint8Array(buf, rx.blobPtr, 256);
+  rx.seed = new Uint8Array(buf, rx.seedPtr, 32);
+  rx.target = new Uint8Array(buf, rx.targetPtr, 8);
+  rx.nonce = new Uint8Array(buf, rx.noncePtr, 4);
+  rx.hash = new Uint8Array(buf, rx.hashPtr, 32);
+  rx.found = new Int32Array(buf, rx.foundPtr, 1);
 }
 
 function loadWasm() {
