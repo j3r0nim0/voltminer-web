@@ -1,18 +1,17 @@
 /* RandomX hash worker (experimental).
 
-   Fast/full-dataset mode: one Wasm instance maps ~2 GB (RandomX dataset
-   ~2080 MB + scratch). Extra workers do not share that buffer, so the
-   page runs exactly one worker per tab.
+   Fast/full-dataset interpreted RandomX in Wasm. JIT is not available
+   in the browser (CompiledVm::execute is empty). The inner nonce loop
+   runs in C++ (`_randomx_mine`) so JS is not on the hash path.
 
-   First _randomx_hash call builds the dataset (can take 1–3 minutes).
-   Later hashes reuse it until the seed changes. */
+   First call builds the ~2 GB dataset (1–3 min). Extra workers would
+   each allocate another 2 GB — the page runs exactly one. */
 
 const WASM_JS = new URL('vendor/randomx/web-randomx.js', self.location).href;
 
 let modulePromise = null;
 let rx = null;
 let nonceBase = (Math.random() * 0x100000000) >>> 0;
-let debugOnce = false;
 let datasetReady = false;
 
 function hexToBytes(hex) {
@@ -28,36 +27,14 @@ function bytesToHex(bytes) {
   return s;
 }
 
-/** XMRig Job::checkHash — first 8 bytes of hash as LE uint64 <= target. */
-function meetsTarget(output, target) {
-  if (!target.length) return false;
-  let tmp = 0;
-  const n = Math.min(4, target.length);
-  for (let i = 0; i < n; i++) tmp |= target[i] << (8 * i);
-  tmp >>>= 0;
-  if (tmp === 0) {
-    if (target.length >= 8) {
-      let h = 0n;
-      let t = 0n;
-      for (let i = 0; i < 8; i++) {
-        h |= BigInt(output[i]) << BigInt(8 * i);
-        t |= BigInt(target[i]) << BigInt(8 * i);
-      }
-      return h <= t;
-    }
-    return false;
-  }
-  const t64 = 0xFFFFFFFFFFFFFFFFn / (0xFFFFFFFFn / BigInt(tmp));
-  let h = 0n;
-  for (let i = 0; i < 8; i++) h |= BigInt(output[i]) << BigInt(8 * i);
-  return h <= t64;
-}
-
 function bindHeap() {
   const heap = rx.module.HEAPU8;
-  rx.input = new Uint8Array(heap.buffer, rx.inputPtr, 256);
-  rx.output = new Uint8Array(heap.buffer, rx.outputPtr, 32);
+  rx.blob = new Uint8Array(heap.buffer, rx.blobPtr, 256);
   rx.seed = new Uint8Array(heap.buffer, rx.seedPtr, 32);
+  rx.target = new Uint8Array(heap.buffer, rx.targetPtr, 8);
+  rx.nonce = new Uint8Array(heap.buffer, rx.noncePtr, 4);
+  rx.hash = new Uint8Array(heap.buffer, rx.hashPtr, 32);
+  rx.found = new Int32Array(heap.buffer, rx.foundPtr, 1);
 }
 
 function loadWasm() {
@@ -86,18 +63,22 @@ function loadWasm() {
           return new URL('vendor/randomx/' + name, self.location).href;
         },
       });
+      const mineFn = module._randomx_mine;
       const hashFn = module._randomx_hash;
-      if (typeof hashFn !== 'function') throw new Error('_randomx_hash not exported');
-      const inputPtr = module._malloc(256);
-      const outputPtr = module._malloc(32);
-      const seedPtr = module._malloc(32);
+      if (typeof mineFn !== 'function' && typeof hashFn !== 'function') {
+        throw new Error('_randomx_mine/_randomx_hash not exported');
+      }
       rx = {
         module,
+        mineFn,
         hashFn,
         isFull: module._randomx_is_full_mem,
-        inputPtr,
-        outputPtr,
-        seedPtr,
+        blobPtr: module._malloc(256),
+        seedPtr: module._malloc(32),
+        targetPtr: module._malloc(8),
+        noncePtr: module._malloc(4),
+        hashPtr: module._malloc(32),
+        foundPtr: module._malloc(4),
       };
       bindHeap();
       return true;
@@ -112,54 +93,54 @@ function loadWasm() {
 
 let job = null;
 let running = false;
+let blobBytes = new Uint8Array(0);
+let seedBytes = new Uint8Array(0);
 let targetBytes = new Uint8Array(4).fill(0xff);
+let blobLen = 0;
 
 function setJob(next) {
   job = next;
   if (!job || !job.blob) return;
+  blobBytes = hexToBytes(job.blob);
+  blobLen = blobBytes.length;
+  seedBytes = hexToBytes(job.seed_hash);
   const t = hexToBytes(job.target);
   targetBytes = t.length ? t : new Uint8Array(4).fill(0xff);
 }
 
-function hashOnce() {
-  if (!rx || !job) return null;
+function mineBatch(maxHashes) {
+  if (!rx || !job || blobLen < 43) return { n: 0, solved: null };
   bindHeap();
-  const blob = hexToBytes(job.blob);
-  if (blob.length < 43) return null;
-  rx.input.fill(0);
-  rx.input.set(blob.subarray(0, Math.min(blob.length, rx.input.length)));
-  const seed = hexToBytes(job.seed_hash);
+  rx.blob.fill(0);
+  rx.blob.set(blobBytes.subarray(0, Math.min(blobLen, 256)));
   rx.seed.fill(0);
-  if (seed.length) rx.seed.set(seed.subarray(0, Math.min(32, seed.length)));
+  if (seedBytes.length) rx.seed.set(seedBytes.subarray(0, Math.min(32, seedBytes.length)));
+  rx.target.fill(0);
+  rx.target.set(targetBytes.subarray(0, Math.min(8, targetBytes.length)));
+  rx.found[0] = 0;
 
-  nonceBase = (nonceBase + 1) >>> 0;
-  const nonce = nonceBase;
-  rx.input[39] = (nonce >>> 24) & 0xff;
-  rx.input[40] = (nonce >>> 16) & 0xff;
-  rx.input[41] = (nonce >>> 8) & 0xff;
-  rx.input[42] = nonce & 0xff;
-
+  const start = nonceBase;
+  nonceBase = (nonceBase + maxHashes) >>> 0;
   const height = BigInt(job.height || 0);
-  rx.hashFn(height, height, rx.seedPtr, rx.inputPtr, blob.length, rx.outputPtr);
+  const n = rx.mineFn(
+    height,
+    height,
+    rx.seedPtr,
+    rx.blobPtr,
+    blobLen,
+    start,
+    maxHashes,
+    rx.targetPtr,
+    targetBytes.length,
+    rx.foundPtr,
+    rx.noncePtr,
+    rx.hashPtr,
+  );
   bindHeap();
-
-  const nonceHex = bytesToHex(rx.input.subarray(39, 43));
-  const result = bytesToHex(rx.output.subarray(0, 32));
-  const ok = meetsTarget(rx.output.subarray(0, 32), targetBytes);
-  if (!debugOnce) {
-    debugOnce = true;
-    const full = rx.isFull ? !!rx.isFull() : false;
-    postMessage({
-      type: 'debug',
-      nonceHex,
-      result,
-      target: job.target,
-      ok,
-      full,
-      h64: bytesToHex(rx.output.subarray(0, 8)),
-    });
-  }
-  return { nonceHex, result, ok };
+  const solved = rx.found[0]
+    ? { nonceHex: bytesToHex(rx.nonce), result: bytesToHex(rx.hash) }
+    : null;
+  return { n: n | 0, solved };
 }
 
 function loop() {
@@ -171,7 +152,7 @@ function loop() {
   if (!datasetReady) {
     postMessage({ type: 'status', message: 'Building RandomX dataset (~2 GB). First hash can take 1–3 minutes. Do not close the tab.' });
     const tInit = performance.now();
-    hashOnce();
+    mineBatch(1);
     bindHeap();
     const full = rx.isFull ? !!rx.isFull() : false;
     datasetReady = true;
@@ -186,10 +167,11 @@ function loop() {
   const t0 = performance.now();
   let n = 0;
   let solved = null;
-  while (performance.now() - t0 < 250) {
-    const r = hashOnce();
-    n += 1;
-    if (r && r.ok) { solved = r; break; }
+  while (performance.now() - t0 < 400) {
+    const r = mineBatch(4);
+    n += r.n;
+    if (r.solved) { solved = r.solved; break; }
+    if (!r.n) break;
   }
   if (n) postMessage({ type: 'hashes', n });
   if (solved) {

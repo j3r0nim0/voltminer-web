@@ -14,7 +14,7 @@ Built from https://github.com/WebCryptomining/WebRandomX with Emscripten
 on the first hash. Link flags:
 
   -sMODULARIZE=1 -sEXPORT_NAME=createWebRandomX -sENVIRONMENT=worker
-  -sEXPORTED_FUNCTIONS=_malloc,_free,_randomx_hash,_randomx_is_full_mem
+  -sEXPORTED_FUNCTIONS=_malloc,_free,_randomx_hash,_randomx_mine,_randomx_is_full_mem
   -sEXPORTED_RUNTIME_METHODS=HEAPU8
   -sINITIAL_MEMORY=512MB -sMAXIMUM_MEMORY=3072MB -sALLOW_MEMORY_GROWTH=1
 
