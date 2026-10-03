@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Web miner — VoltMiner (experimental)</title>
-  <meta name="description" content="Experimental, opt-in browser miner for VoltMiner. Mines Monero via MoneroOcean to your own wallet. Slow by design — the Android app is the real miner." />
+  <title>Browser Experiment — VoltMiner</title>
+  <meta name="description" content="VoltMiner Browser Experiment: RandomX in a Web Worker, shares paid straight to your own MoneroOcean wallet. 0% fee from us. Made for desktops, laptops and Chromebooks." />
   <meta name="theme-color" content="#0a1226" />
-  <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <link rel="stylesheet" href="css/styles.css" />
@@ -14,28 +13,21 @@
 <body>
   <header class="nav">
     <div class="wrap">
-      <a class="brand" href="https://voltminer.net/" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner</a>
+      <span class="brand" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner</span>
       <nav>
-        <a href="https://voltminer.net/#features">Features</a>
-        <a href="https://voltminer.net/leaderboard.html">Clan Leaderboard</a>
-        <a href="./" aria-current="page">Web miner</a>
-        <a class="btn" href="https://voltminer.net/#download">Get VoltMiner</a>
+        <a href="./" aria-current="page">Browser Experiment</a>
       </nav>
     </div>
   </header>
 
   <section class="hero" style="padding-bottom:36px;">
     <div class="wrap">
-      <span class="pill">Experimental · Opt-in · Non-custodial</span>
-      <h1>Browser miner. <span class="volt">Not the real thing.</span></h1>
-      <p class="sub">Experiment: this page tries <strong>RandomX</strong> in a Web Worker
-        and sends shares to <strong>MoneroOcean</strong> under <em>your</em> wallet via a
-        small origin-locked VPS bridge (not Cloudflare). It is a sandbox next to the
-        Android app. Expect toy H/s. iOS will suspend it in the background.</p>
-      <div class="cta">
-        <a class="btn" href="https://voltminer.net/#download">Get the Android app</a>
-        <button class="btn ghost" type="button" data-pwa-install hidden>Install as app</button>
-      </div>
+      <span class="pill">Experimental · Opt-in · Non-custodial · 0% fee</span>
+      <h1>Browser miner. <span class="volt">Made for Desktops/Laptops/Chromebooks</span></h1>
+      <p class="sub">A standalone experiment: this page runs <strong>RandomX</strong> in a Web Worker
+        and sends shares to <strong>MoneroOcean</strong> under <em>your</em> wallet. We take
+        <strong>0%</strong> — no cut of your hashrate, no redirected shares (the pool may charge
+        its own fee). Expect toy H/s. A hidden tab stops hashing.</p>
     </div>
   </section>
 
@@ -46,13 +38,13 @@
         <ul>
           <li><strong>You start it.</strong> Nothing hashes until you press Start. Closing the tab stops it.</li>
           <li><strong>Your wallet, your coins.</strong> The address goes to the pool as the stratum login. VoltMiner never holds XMR.</li>
+          <li><strong>0% fee.</strong> We take no cut of the hashrate and never swap your payout address. MoneroOcean may apply its own pool fee.</li>
           <li><strong>Ad-blockers will fight this.</strong> uBlock Origin and some antivirus flag Wasm miners even with consent. Pause them on this page or the WebSocket never opens.</li>
-          <li><strong>Chrome, not Safari.</strong> Fast mode grows Wasm toward ~3 GB. Safari often cannot. Use a 16 GB PC and close other tabs.</li>
-          <li><strong>One 2 GB dataset, extra cores on this origin.</strong> <code>web.voltminer.net</code> is cross-origin isolated, so C++ pthreads share the dataset (phone math: +~2 MB scratchpad each, not +2 GB). GitHub Pages stays 1 thread. Still interpreted Wasm — a phone XMRig core will beat a tab core.</li>
-          <li><strong>Start-diff 30 000.</strong> Same <code>wallet+30000</code> as the Android app so we do not spray 10k shares at the pool. Jobs still rotate every few seconds; this only makes shares rarer (~14 min at 35 H/s).</li>
-          <li><strong>Leave the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can IP-ban the bridge for 10 minutes.</li>
-          <li><strong>RandomX in a tab, not XMRig.</strong> Same algo family as the APK (<code>rx/0</code>), no huge pages, no JIT. The Android app will always win on the same machine.</li>
-          <li><strong>Needs the VPS bridge.</strong> Production is <code>wss://bridge.voltminer.net</code> on DigitalOcean. Not a Cloudflare Worker.</li>
+          <li><strong>Desktop browser.</strong> Fast mode pins about 3.5 GB inside the tab, so 8 GB machines may swap or fall back to cache-only mode. iOS and Safari usually suspend the worker.</li>
+          <li><strong>One dataset, extra cores.</strong> This page is cross-origin isolated, so the C++ pthreads share a single ~2 GB dataset — each extra thread adds only its scratchpad. Interpreted Wasm: tens of H/s, not thousands.</li>
+          <li><strong>Keep the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can get the relay rate-limited.</li>
+          <li><strong>RandomX, interpreted.</strong> Same algorithm family as native miners (<code>rx/0</code>), but no huge pages and no JIT in Wasm.</li>
+          <li><strong>Why a relay.</strong> A browser cannot open the pool's TLS stratum socket, so a small origin-locked relay on our VPS forwards the WebSocket to the pool. It does not rewrite your login, the job, or the shares in either direction.</li>
         </ul>
       </aside>
 
@@ -107,16 +99,25 @@
 
   <footer>
     <div class="wrap">
-      <div>⚡ VoltMiner — open-source Monero mining. App code MIT-licensed; bundled XMRig is GPL-3.0.</div>
+      <div>⚡ VoltMiner — Browser Experiment. 0% fee: we take no cut of your shares.</div>
       <div>
-        <a href="https://voltminer.net/">Home</a> ·
-        <a href="https://voltminer.net/leaderboard.html">Clan Leaderboard</a> ·
-        <a href="https://voltminer.net/about.html">About Us</a>
+        <a href="https://voltminer.net/about.html">About Us</a> ·
+        <a href="notices.html">Third-party notices</a>
       </div>
+      <div class="muted">© 2026 VoltMiner. This page and its scripts are all rights reserved. Bundled RandomX/Wasm components are BSD-3-Clause — see notices.</div>
     </div>
   </footer>
 
-  <script src="js/pwa.js?v=51"></script>
+  <script>
+    /* No PWA. Clear any service worker or cache left over from an earlier
+       version of this page so it cannot serve a stale copy of mine.js. */
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((r) => r.forEach((x) => x.unregister())).catch(() => {});
+    }
+    if (window.caches && caches.keys) {
+      caches.keys().then((k) => Promise.all(k.map((x) => caches.delete(x)))).catch(() => {});
+    }
+  </script>
   <script type="module" src="js/mine.js?v=51"></script>
 </body>
 </html>

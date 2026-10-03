@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Third-party notices — VoltMiner Browser Experiment</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <span class="brand" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner</span>
+      <nav>
+        <a href="./">Browser Experiment</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero" style="padding-bottom:24px;">
+    <div class="wrap">
+      <h1>Third-party notices</h1>
+      <p class="sub">Components contained in the WebAssembly miner served by this page, and the
+        licences that apply to them.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap" style="display:block;">
+
+      <div class="card">
+        <h3>This page</h3>
+        <p class="note">© 2026 VoltMiner. All rights reserved. The HTML, CSS, JavaScript and worker
+          code of the Browser Experiment are proprietary; no licence is granted.</p>
+      </div>
+
+      <div class="card">
+        <h3>RandomX · WebRandomX</h3>
+        <p class="note">Bundled as <span class="mono">js/vendor/randomx/web-randomx-mt.{js,wasm}</span>
+          (pthread build) and <span class="mono">js/vendor/randomx/web-randomx.{js,wasm}</span>
+          (single-thread build). Built from
+          <span class="mono">github.com/WebCryptomining/WebRandomX</span> at commit
+          <span class="mono">780908a</span> with Emscripten 4.0.10, plus the patches in
+          <span class="mono">third_party/WebRandomX-overlay/</span>.
+          Licence: BSD-3-Clause.</p>
+        <pre class="hash-log" style="height:auto; max-height:none;">Copyright (c) 2018-2019, tevador &lt;tevador@gmail.com&gt;
+
+Copyright (c) 2014-2019, The Monero Project
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+	* Redistributions of source code must retain the above copyright
+	  notice, this list of conditions and the following disclaimer.
+	* Redistributions in binary form must reproduce the above copyright
+	  notice, this list of conditions and the following disclaimer in the
+	  documentation and/or other materials provided with the distribution.
+	* Neither the name of the copyright holder nor the
+	  names of its contributors may be used to endorse or promote products
+	  derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</pre>
+        <p class="note">The same notice covers the Argon2 files
+          (<span class="mono">argon2_core.c</span>, <span class="mono">argon2_simd.c</span>) and
+          BLAKE2 (<span class="mono">blake2b.c</span>) as vendored in that source tree.</p>
+      </div>
+
+      <div class="card">
+        <h3>Berkeley SoftFloat 3c</h3>
+        <p class="note">Compiled into the WebAssembly module
+          (<span class="mono">softfloat.cpp</span>, <span class="mono">softfloat.hpp</span>) to
+          emulate IEEE-754 rounding that WebAssembly cannot express. Licence: BSD-3-Clause.</p>
+        <p class="note">Copyright 2011, 2012, 2013, 2014, 2015, 2016, 2017 The Regents of the
+          University of California. All rights reserved. Distributed under the BSD-3-Clause
+          conditions reproduced above.</p>
+      </div>
+
+      <div class="card">
+        <h3>Emscripten runtime</h3>
+        <p class="note">The <span class="mono">web-randomx*.js</span> glue and the runtime linked
+          into the WebAssembly module (musl libc, dlmalloc, compiler-rt). Emscripten is offered
+          under two licences — MIT or the University of Illinois/NCSA Open Source License; the
+          MIT text follows.</p>
+        <pre class="hash-log" style="height:auto; max-height:none;">Copyright (c) 2010-2014 Emscripten authors, see AUTHORS file.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.</pre>
+      </div>
+
+      <div class="card">
+        <h3>Relay (server side, not shipped to browsers)</h3>
+        <p class="note">The origin-locked WebSocket→TLS relay uses the
+          <span class="mono">ws</span> package for Node.js (MIT, © 2011 Einar Otto Stangvik and
+          contributors). It never runs in your browser and never touches your wallet.</p>
+      </div>
+
+      <div class="card">
+        <h3>No fee</h3>
+        <p class="note">VoltMiner takes 0% of your hashrate on this page. Your wallet is the
+          pool login; we do not redirect shares, and the relay rewrites nothing in either
+          direction. MoneroOcean may charge its own pool fee, which is outside our control.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div>⚡ VoltMiner — Browser Experiment</div>
+      <div><a href="./">Back to the miner</a></div>
+    </div>
+  </footer>
+</body>
+</html>

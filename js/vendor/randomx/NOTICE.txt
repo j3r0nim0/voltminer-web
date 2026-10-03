@@ -1,27 +1,40 @@
-RandomX-in-the-browser is an *experiment*, not the VoltMiner product miner.
+RandomX in the browser — third-party notices
+============================================
 
-The Android app uses the bundled XMRig binary (MoneroOcean fork) speaking
-TLS stratum to gulf.moneroocean.stream:20032 — RandomX native, DONATE 0%.
+This folder ships a WebAssembly build of RandomX (RandomX / WebRandomX).
+The HTML, CSS and JavaScript of the Browser Experiment are proprietary
+(© 2026 VoltMiner, all rights reserved; no licence granted).
 
-This folder holds a compiled WebRandomX (tevador/RandomX → Wasm) build:
+Files
+-----
+web-randomx-mt.js / web-randomx-mt.wasm   pthread build, one shared ~2 GB dataset
+web-randomx.js    / web-randomx.wasm      single-thread fallback (no SharedArrayBuffer)
 
-  web-randomx.js     Emscripten glue (createWebRandomX, MODULARIZE, worker)
-  web-randomx.wasm   fast/full-dataset mode. Heap grows toward 3 GB.
-                     Dataset itself is ~2080 MB + extra. One instance per tab.
+Built from https://github.com/WebCryptomining/WebRandomX @ 780908a with
+Emscripten 4.0.10, plus the patches in third_party/WebRandomX-overlay/
+(that folder carries the changed sources and build-web-randomx-mt.sh; the
+pthread link flags live in its CMakeLists.txt).
 
-Built from https://github.com/WebCryptomining/WebRandomX with Emscripten
-4.0.10. web_randomx.cpp forces RANDOMX_FLAG_FULL_MEM and inits the dataset
-on the first hash. Link flags:
+Bundled components and licences
+-------------------------------
+RandomX / WebRandomX ............... BSD-3-Clause
+                                     © 2018-2019 tevador <tevador@gmail.com>
+                                     © 2014-2019 The Monero Project
+  argon2_core.c, argon2_simd.c,
+  blake2b.c ........................ same BSD-3-Clause notice
+Berkeley SoftFloat 3c .............. BSD-3-Clause
+                                     © 2011-2017 The Regents of the University of California
+Emscripten runtime (glue, musl,
+dlmalloc, compiler-rt) ............. MIT or UIUC/NCSA
+                                     © 2010-2014 Emscripten authors
+ws (Node.js, relay only) ........... MIT
 
-  -sMODULARIZE=1 -sEXPORT_NAME=createWebRandomX -sENVIRONMENT=worker
-  -sEXPORTED_FUNCTIONS=_malloc,_free,_randomx_hash,_randomx_mine,_randomx_is_full_mem
-  -sEXPORTED_RUNTIME_METHODS=HEAPU8
-  -sINITIAL_MEMORY=512MB -sMAXIMUM_MEMORY=3072MB -sALLOW_MEMORY_GROWTH=1
+Full licence texts are published at notices.html (served next to this page).
 
-Needs a 16 GB RAM PC to run smoothly. 8 GB will swap or fall back to
-light/cache mode.
-
-License of RandomX / WebRandomX is BSD-3-Clause. Do not hotlink a
-third-party wasm at runtime.
-
-The hop itself is tools/web-stratum-bridge on a VPS, not Cloudflare.
+Notes
+-----
+- Do not hotlink a third-party wasm at runtime; both binaries are committed here.
+- The relay hop lives in tools/web-stratum-bridge, on our own VPS. Browsers cannot
+  open the pool's TLS stratum socket, so the relay forwards the WebSocket to it and
+  rewrites nothing in either direction.
+- This page mines to the visitor's own wallet and takes 0% of the hashrate.
