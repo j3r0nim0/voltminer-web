@@ -207,6 +207,16 @@ if (hashLogClear) {
   });
 }
 
+/** The only place that reflects "is it mining?" in the controls. Stop turns red
+    while hashing, so the kill switch is unmissable; Start dims out. */
+function setRunningUI(running) {
+  startBtn.disabled = running;
+  stopBtn.disabled = !running;
+  walletEl.disabled = running;
+  consentEl.disabled = running;
+  stopBtn.classList.toggle('danger', running);
+}
+
 function startMining() {
   const wallet = normalizeWallet(walletEl.value);
   walletEl.value = wallet;
@@ -242,10 +252,7 @@ function startMining() {
   trRelay.textContent = client.bridgeUrl || '—';
   trMo.href = moLink.href;
 
-  startBtn.disabled = true;
-  stopBtn.disabled = false;
-  walletEl.disabled = true;
-  consentEl.disabled = true;
+  setRunningUI(true);
   startSoakClock();
   armCap();
   setStatus('Starting…');
@@ -260,10 +267,7 @@ function startMining() {
     });
   } catch (err) {
     setStatus(err.message || String(err));
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    walletEl.disabled = false;
-    consentEl.disabled = false;
+    setRunningUI(false);
   }
 }
 
@@ -278,10 +282,7 @@ startBtn.addEventListener('click', (e) => {
 
 stopBtn.addEventListener('click', () => {
   client.stop();
-  startBtn.disabled = false;
-  stopBtn.disabled = true;
-  walletEl.disabled = false;
-  consentEl.disabled = false;
+  setRunningUI(false);
   stopSoakClock();
   clearCap();
   const elapsed = soakStartedAt ? formatSoak(Date.now() - soakStartedAt) : '0:00';
@@ -358,10 +359,7 @@ function armCap() {
   capTimer = setTimeout(() => {
     if (!client.wantRun) return;
     client.stop();
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    walletEl.disabled = false;
-    consentEl.disabled = false;
+    setRunningUI(false);
     stopSoakClock();
     setStatus('60-minute session finished. Nothing is running now — press Start again if you want another hour.');
     logLine('', 'session cap reached (60 min) — stopped.');
@@ -379,10 +377,7 @@ async function initBattery() {
     const apply = () => {
       if (client.wantRun && chargingOnly && chargingOnly.checked && !batteryState.charging) {
         client.stop();
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        walletEl.disabled = false;
-        consentEl.disabled = false;
+        setRunningUI(false);
         stopSoakClock();
         clearCap();
         setStatus('Paused — this device is on battery. Plug in to continue, or uncheck “Only while charging”.');

@@ -57,6 +57,10 @@ header.nav {
 }
 .btn:hover { transform: translateY(-1px); text-decoration: none; box-shadow: 0 6px 24px rgba(255,210,30,0.25); }
 .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+/* Stop is the kill switch: while the tab is hashing it turns red, so the way
+   out is the loudest control on the panel. */
+.btn.danger { background: var(--red); color: #fff; border: 1px solid transparent; }
+.btn.danger:hover { box-shadow: 0 6px 24px rgba(255,90,90,0.28); }
 
 /* ── Hero ──────────────────────────────────────────── */
 .hero { padding: 90px 0 70px; text-align: center; position: relative; overflow: hidden; }
