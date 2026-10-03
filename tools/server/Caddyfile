@@ -38,6 +38,14 @@ web.voltminer.net {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "no-referrer"
 	}
+	# Ops health alias: the relay only answers "/health" exactly, and the proxied
+	# path keeps its /stratum prefix, so health is exposed here instead. Lets the
+	# bridge hostname be dropped later without losing the ops surface.
+	handle /relay-health {
+		rewrite * /health
+		reverse_proxy 127.0.0.1:8787
+	}
+
 	header /js/vendor/randomx/*.wasm Content-Type application/wasm
 	file_server
 }
