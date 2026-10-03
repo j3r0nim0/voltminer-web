@@ -51,3 +51,18 @@ Site code is proprietary (© 2026 VoltMiner, all rights reserved). The bundled
 WebAssembly is BSD-3-Clause (RandomX/WebRandomX: tevador, The Monero Project; SoftFloat:
 the Regents of the University of California) and the Emscripten runtime is MIT/UIUC.
 Full texts: `notices.html` and `js/vendor/randomx/NOTICE.txt`.
+
+## Trust surface (2026-10-03)
+
+- **Same-origin relay.** The page opens one WebSocket to `wss://web.voltminer.net/stratum`, proxied by
+  Caddy to the relay on `127.0.0.1:8787` — one host, so `connect-src 'self'` is enough. The old
+  `bridge.voltminer.net` endpoint still works but is no longer used by the page.
+- **Strict CSP.** `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'`, plus
+  `Permissions-Policy`, HSTS, `X-Frame-Options: DENY`, COOP/COEP/CORP. The wasm glue is loaded with
+  `importScripts` (not `eval`) so no `'unsafe-eval'` is needed. Headers are versioned in
+  `tools/server/Caddyfile`.
+- **Consent affordances.** Start-only hashing, "Delete cached dataset" and "Forget my wallet" buttons,
+  a live "Pool login / Worker id / Relay / Stored here" strip, links to the pool dashboard and API for
+  the address, charging-only default, and a 60-minute session cap default. Default is 2 threads, not all.
+- **Published, verifiable.** `transparency/` holds the wasm patch, the build script, the relay source and
+  `SHA256SUMS` for every served asset, with the audit recipe. `.well-known/security.txt` for reports.

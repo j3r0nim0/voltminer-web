@@ -11,12 +11,29 @@ export const POOL_NAME = 'gulf.moneroocean.stream:20032';
 export const PROD_BRIDGE_WS = 'wss://bridge.voltminer.net';
 
 export function defaultBridgeUrl() {
+  // A relay override used to live in localStorage. That is a silent endpoint
+  // swap, which is exactly the mechanic this page tells you to distrust, so it
+  // now has to come from the URL (?relay=...) where you can see it in the bar.
   try {
-    const override = localStorage.getItem('voltminer.web.bridgeWs');
-    if (override && /^wss?:\/\//i.test(override)) return override;
-  } catch { /* private mode */ }
+    const q = new URLSearchParams(location.search).get('relay');
+    if (q && /^wss?:\/\//i.test(q)) return q;
+  } catch { /* ignore */ }
   const host = typeof location !== 'undefined' ? location.hostname : '';
   if (host === 'localhost' || host === '127.0.0.1') return 'ws://127.0.0.1:8787';
+  return relayUrl();
+}
+
+/** Same-origin relay endpoint when the page is served over http(s).
+    One host, so a strict Content-Security-Policy can say `connect-src 'self'`
+    and nobody has to trust a second domain. */
+export function relayUrl() {
+  try {
+    if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol)) {
+      const u = new URL('/stratum', location.href);
+      u.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return u.href;
+    }
+  } catch { /* fall through */ }
   return PROD_BRIDGE_WS;
 }
 
@@ -74,9 +91,11 @@ export function canShareDataset() {
 }
 
 export function defaultThreadCount() {
+  // Deliberately restrained: 2 threads even on a big machine (the ceiling is
+  // still 4, and the slider is right there). A miner that grabs every core by
+  // default is the thing people are right to be suspicious of.
   if (!canShareDataset()) return 1;
-  const n = hardwareThreads();
-  return Math.max(1, Math.min(4, Math.max(1, n - 2)));
+  return hardwareThreads() >= 4 ? 2 : 1;
 }
 
 export function loadOrCreateWorkerId() {

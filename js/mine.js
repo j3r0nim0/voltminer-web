@@ -1,11 +1,12 @@
 import {
   MinerClient,
   isValidWallet,
+  defaultBridgeUrl,
   defaultThreadCount,
   canShareDataset,
   hardwareThreads,
   loadOrCreateWorkerId,
-} from './miner-client.js';
+} from './miner-client.js?v=52';
 
 const $ = (id) => document.getElementById(id);
 
@@ -229,14 +230,31 @@ function startMining() {
     setStatus('Tick the yellow box under Threads first (the one that says “I agree”).');
     return;
   }
+  if (chargingOnly && chargingOnly.checked && batteryState && !batteryState.charging) {
+    setStatus('This device is on battery. Plug in, or uncheck “Only while charging” to mine anyway.');
+    return;
+  }
   try { localStorage.setItem('voltminer.web.wallet', wallet); } catch (_) { /* ignore */ }
   moLink.href = `https://moneroocean.stream/#/wallet/${encodeURIComponent(wallet)}/overview`;
+
+  // Radical-transparency strip: the exact login the pool sees, the worker id,
+  // and one-click places to check it yourself.
+  const login = `${wallet}+10000`;
+  trWallet.textContent = login;
+  trWorker.textContent = workerId;
+  trRelay.textContent = client.bridgeUrl || '—';
+  trMo.href = moLink.href;
+  trApi.href = `https://api.moneroocean.stream/miner/${encodeURIComponent(wallet)}/stats`;
+  trApi.textContent = `api.moneroocean.stream/miner/${wallet.slice(0, 10)}…/stats`;
+  if (trCopy) trCopy.hidden = false;
+  refreshStorage();
 
   startBtn.disabled = true;
   stopBtn.disabled = false;
   walletEl.disabled = true;
   consentEl.disabled = true;
   startSoakClock();
+  armCap();
   setStatus('Starting…');
   logLine('', `start soak=${formatSoak(0)}`);
 
@@ -272,6 +290,7 @@ stopBtn.addEventListener('click', () => {
   walletEl.disabled = false;
   consentEl.disabled = false;
   stopSoakClock();
+  clearCap();
   const elapsed = soakStartedAt ? formatSoak(Date.now() - soakStartedAt) : '0:00';
   setStatus(`Stopped. Soak ${elapsed}.`);
   logLine('', `stop soak=${elapsed}`);
@@ -284,3 +303,136 @@ document.addEventListener('visibilitychange', () => {
     setStatus('Tab hidden — hashing may pause until you come back.');
   }
 });
+
+
+/* ---------------------------------------------------------------------------
+   Transparency affordances. Everything here is visible to the visitor: what is
+   stored and how to delete it, whether the device is charging, and a session
+   that ends by itself instead of running forever.
+   --------------------------------------------------------------------------- */
+const OPFS_HINT = 'the RandomX dataset cache (one file per network seed)';
+const SESSION_CAP_MS = 60 * 60 * 1000;
+
+const chargingOnly = document.getElementById('charging-only');
+const cap60 = document.getElementById('cap60');
+const trWallet = document.getElementById('tr-wallet');
+const trWorker = document.getElementById('tr-worker');
+const trRelay = document.getElementById('tr-relay');
+const trMo = document.getElementById('tr-mo');
+const trApi = document.getElementById('tr-api');
+const trCopy = document.getElementById('tr-copy');
+let batteryState = null;
+let capTimer = null;
+
+async function refreshStorage() {
+  const el = document.getElementById('tr-storage');
+  if (!el) return;
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+      const mb = (n) => `${(n / 1048576).toFixed(0)} MB`;
+      el.textContent = `${mb(usage)} used${quota ? ` of ${mb(quota)} allowed` : ''} — ${OPFS_HINT}`;
+      return;
+    }
+  } catch (_) { /* ignore */ }
+  el.textContent = `not measurable here — ${OPFS_HINT}`;
+}
+
+async function deleteCachedData() {
+  let removed = 0;
+  try {
+    if (navigator.storage && navigator.storage.getDirectory) {
+      const root = await navigator.storage.getDirectory();
+      for await (const [name] of root.entries()) {
+        await root.removeEntry(name, { recursive: true });
+        removed += 1;
+      }
+    }
+    if (window.caches && caches.keys) {
+      for (const k of await caches.keys()) await caches.delete(k);
+    }
+  } catch (_) { /* ignore */ }
+  logLine('', `deleted cached data (${removed} entr${removed === 1 ? 'y' : 'ies'}) — the next Start rebuilds the dataset.`);
+  setStatus('Cached dataset deleted.');
+  refreshStorage();
+}
+
+function forgetWallet() {
+  try { localStorage.removeItem('voltminer.web.wallet'); } catch (_) { /* ignore */ }
+  walletEl.value = '';
+  setStatus('Saved wallet forgotten — this browser no longer remembers an address.');
+}
+
+function armCap() {
+  clearCap();
+  if (!cap60 || !cap60.checked) return;
+  capTimer = setTimeout(() => {
+    if (!client.wantRun) return;
+    client.stop();
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    walletEl.disabled = false;
+    consentEl.disabled = false;
+    stopSoakClock();
+    setStatus('60-minute session finished. Nothing is running now — press Start again if you want another hour.');
+    logLine('', 'session cap reached (60 min) — stopped.');
+  }, SESSION_CAP_MS);
+}
+function clearCap() {
+  if (capTimer) clearTimeout(capTimer);
+  capTimer = null;
+}
+
+async function initBattery() {
+  try {
+    if (!navigator.getBattery) return;
+    batteryState = await navigator.getBattery();
+    const apply = () => {
+      if (client.wantRun && chargingOnly && chargingOnly.checked && !batteryState.charging) {
+        client.stop();
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        walletEl.disabled = false;
+        consentEl.disabled = false;
+        stopSoakClock();
+        clearCap();
+        setStatus('Paused — this device is on battery. Plug in to continue, or uncheck “Only while charging”.');
+        logLine('', 'paused: on battery');
+      }
+    };
+    batteryState.addEventListener('chargingchange', apply);
+    apply();
+  } catch (_) { /* ignore */ }
+}
+
+const delBtn = document.getElementById('delete-dataset');
+if (delBtn) {
+  delBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (client.wantRun) {
+      setStatus('Stop mining first, then delete the cache.');
+      return;
+    }
+    delBtn.disabled = true;
+    await deleteCachedData();
+    setTimeout(() => { delBtn.disabled = false; }, 800);
+  });
+}
+const forgetBtn = document.getElementById('forget-wallet');
+if (forgetBtn) forgetBtn.addEventListener('click', (e) => { e.preventDefault(); forgetWallet(); });
+if (trCopy) {
+  trCopy.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!trWallet.textContent) return;
+    try {
+      await navigator.clipboard.writeText(trWallet.textContent);
+      trCopy.textContent = 'Copied';
+      setTimeout(() => { trCopy.textContent = 'Copy wallet'; }, 1200);
+    } catch (_) { /* ignore */ }
+  });
+}
+refreshStorage();
+initBattery();
+// Show the relay endpoint before Start too — it is a known value, so there is
+// no reason to make anyone press a button to see where their shares go.
+if (trRelay) trRelay.textContent = defaultBridgeUrl();

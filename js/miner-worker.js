@@ -84,11 +84,13 @@ function loadWasm() {
         if (USE_MT) throw new Error('pthread wasm missing (' + res.status + ')');
         throw new Error('no wasm js ' + res.status);
       }
-      const src = await res.text();
+      // Load the Emscripten glue as a worker script. importScripts() is a plain
+      // same-origin script fetch: no eval, no string-as-code. That is what lets
+      // the page run under `script-src 'self'` with no 'unsafe-eval'.
       const factory = await new Promise((resolve, reject) => {
         const prev = self.Module;
         try {
-          (0, eval)(src + '\n//# sourceURL=web-randomx.js');
+          self.importScripts(WASM_JS);
         } catch (err) {
           reject(err);
           return;
