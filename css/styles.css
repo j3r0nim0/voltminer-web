@@ -212,6 +212,22 @@ footer a:hover { color: var(--text); }
   width: 22px; height: 22px; min-width: 22px; margin: 0;
   accent-color: var(--volt); cursor: pointer;
 }
+/* Plain settings rows. The two mining options are optional, so they must not wear
+   the consent box's yellow "you must tick this" styling: no border, no fill, a
+   smaller box and tight line spacing — they should read as preferences. */
+.opt-row {
+  display: flex; gap: 10px; align-items: center;
+  margin: 7px 0 0 6px; padding: 0; border: none; background: none;
+  color: var(--muted); font-size: .92rem; line-height: 1.25;
+  cursor: pointer; user-select: none;
+}
+.opt-row:has(input:checked) { color: var(--text); }
+.opt-row:hover { color: var(--text); }
+.opt-row input {
+  width: 16px; height: 16px; min-width: 16px; margin: 0;
+  accent-color: var(--volt); cursor: pointer;
+}
+
 .mine-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 .mine-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
 .mine-stats {
