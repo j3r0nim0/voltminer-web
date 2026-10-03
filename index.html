@@ -31,60 +31,6 @@
     </div>
   </section>
 
-  <section id="trust" style="border-top:none; padding-top:0;">
-    <div class="wrap" style="display:block;">
-      <div class="card" style="max-width:none;">
-        <h3>What this page does — and what it does not</h3>
-        <p class="note">This is a consented cryptominer; that is the whole point of the page. So here is the fine print in
-          plain language, the live values, and the commands to check them yourself.</p>
-        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));">
-          <div>
-            <strong>It does</strong>
-            <ul>
-              <li>Start hashing <strong>only</strong> after you press Start, and stop on Stop or when the tab closes.</li>
-              <li>Send shares to MoneroOcean with <em>your</em> address as the pool login — the one you typed.</li>
-              <li>Write one thing to this site's private storage: a ~2 GB RandomX dataset cache, reused so it is not rebuilt every visit.</li>
-              <li>Remember two small things locally: your address, and the <span class="mono">VMW-…</span> worker id.</li>
-              <li>Open a single WebSocket to this site's own relay, which forwards bytes to the pool unchanged.</li>
-            </ul>
-          </div>
-          <div>
-            <strong>It does not</strong>
-            <ul>
-              <li>Ask for a seed phrase or private key. Ever. Anyone who does is stealing from you.</li>
-              <li>Mine before you press Start, mine with the tab closed, install anything, or run as a background service.</li>
-              <li>Load third-party scripts, fonts, analytics or ads — the CSP header forbids it (<span class="mono">default-src 'none'</span>).</li>
-              <li>Use cookies, or ask for camera, microphone, location or your files.</li>
-              <li>Touch anyone's coins: mining pays the address you pasted, and no key is ever involved.</li>
-            </ul>
-          </div>
-        </div>
-        <div class="mine-stats" style="margin-top:16px;">
-          <div class="stat"><span class="k">Pool login</span><span class="v mono" id="tr-wallet">—</span></div>
-          <div class="stat"><span class="k">Worker id</span><span class="v mono" id="tr-worker">—</span></div>
-          <div class="stat"><span class="k">Relay</span><span class="v mono" id="tr-relay">—</span></div>
-          <div class="stat"><span class="k">Stored here</span><span class="v" id="tr-storage">measuring…</span></div>
-        </div>
-        <div class="mine-actions" style="margin-top:12px; flex-wrap:wrap;">
-          <button class="btn ghost" type="button" id="tr-copy" hidden>Copy wallet</button>
-          <a class="btn ghost" id="tr-mo" href="https://moneroocean.stream/" target="_blank" rel="noopener">Check my shares on MoneroOcean</a>
-          <a class="btn ghost" id="tr-api" href="https://api.moneroocean.stream/" target="_blank" rel="noopener">Pool API for my address</a>
-          <button class="btn ghost" type="button" id="delete-dataset">Delete cached dataset</button>
-          <button class="btn ghost" type="button" id="forget-wallet">Forget my wallet</button>
-        </div>
-        <label class="consent-row" id="power-row"><input type="checkbox" id="charging-only" checked />
-          <span>Only mine while this device is charging</span></label>
-        <label class="consent-row"><input type="checkbox" id="cap60" checked />
-          <span>Stop after 60 minutes (no unattended all-night tab)</span></label>
-        <p class="note">Check the bytes you were served yourself:
-          <span class="mono">curl -s https://web.voltminer.net/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256</span>
-          — published hashes, the wasm patch, the build recipe and the relay's source live in
-          <a href="transparency/">/transparency</a>. The relay rewrites nothing, so a redirected payout would show up as
-          somebody else's address on that dashboard.</p>
-      </div>
-    </div>
-  </section>
-
   <section id="consent" style="border-top:none; padding-top:0;">
     <div class="wrap mine-layout">
       <aside class="card mine-notice">
@@ -118,9 +64,17 @@
             <span><strong>I agree — start hashing on this device</strong> to the wallet above. Ad-blockers may need to be paused.</span>
           </label>
 
-          <div class="mine-actions">
+          <label class="consent-row"><input type="checkbox" id="charging-only" />
+            <span>Only mine while this device is charging</span></label>
+          <label class="consent-row"><input type="checkbox" id="cap60" />
+            <span>Stop after 60 minutes (no unattended all-night tab)</span></label>
+
+          <div class="mine-actions" style="flex-wrap:wrap;">
             <button class="btn" id="start" type="submit">Start mining</button>
             <button class="btn ghost" id="stop" type="button" disabled>Stop</button>
+            <a class="btn ghost" id="tr-mo" href="https://moneroocean.stream/" target="_blank" rel="noopener">Check my shares</a>
+            <button class="btn ghost" type="button" id="delete-dataset">Delete cached dataset</button>
+            <button class="btn ghost" type="button" id="forget-wallet">Forget my wallet</button>
           </div>
         </form>
 
@@ -133,6 +87,7 @@
           <div class="stat"><span class="k">Soak</span><span class="v" id="st-soak">0:00</span></div>
           <div class="stat"><span class="k">Hashes</span><span class="v" id="st-tot">0</span></div>
           <div class="stat"><span class="k">Worker</span><span class="v mono" id="st-wid">—</span></div>
+          <div class="stat"><span class="k">Relay</span><span class="v mono" id="tr-relay">—</span></div>
         </div>
         <p class="note" id="js-gate">If Start does nothing, this page’s JavaScript did not load — pause the ad-blocker on this tab and hard-refresh (Cmd-Shift-R).</p>
         <p class="note" id="st-log"></p>
@@ -151,6 +106,44 @@
     </div>
   </section>
 
+
+  <section id="trust">
+    <div class="wrap" style="display:block;">
+      <div class="card" style="max-width:none;">
+        <h3>What this page does — and what it does not</h3>
+        <p class="note">This is a consented cryptominer; that is the whole point of the page. Here is the short version,
+          and the commands to check it yourself.</p>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));">
+          <div>
+            <strong>It does</strong>
+            <ul>
+              <li>Start hashing <strong>only</strong> after you press Start, and stop on Stop or when the tab closes.</li>
+              <li>Send shares to MoneroOcean with <em>your</em> address as the pool login — the one you typed.</li>
+              <li>Write one thing to this site's private storage: a ~2 GB RandomX dataset cache, reused so it is not rebuilt every visit.</li>
+              <li>Remember two small things locally: your address, and the <span class="mono">VMW-…</span> worker id.</li>
+              <li>Open a single WebSocket to this site's own relay, which forwards bytes to the pool unchanged.</li>
+            </ul>
+          </div>
+          <div>
+            <strong>It does not</strong>
+            <ul>
+              <li>Ask for a seed phrase or private key. Ever. Anyone who does is stealing from you.</li>
+              <li>Mine before you press Start, mine with the tab closed, install anything, or run as a background service.</li>
+              <li>Load third-party scripts, fonts, analytics or ads — the CSP header forbids it (<span class="mono">default-src 'none'</span>).</li>
+              <li>Use cookies, or ask for camera, microphone, location or your files.</li>
+              <li>Touch anyone's coins: mining pays the address you pasted, and no key is ever involved.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">Check the bytes you were served yourself:
+          <span class="mono">curl -s https://web.voltminer.net/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256</span>
+          — published hashes, the wasm patch, the build recipe and the relay's source live in
+          <a href="transparency/">/transparency</a>. The relay rewrites nothing, so a redirected payout would show up as
+          somebody else's address on the MoneroOcean dashboard.</p>
+      </div>
+    </div>
+  </section>
+
   <footer>
     <div class="wrap">
       <div>⚡ VoltMiner — Browser Experiment. 0% fee: we take no cut of your shares.</div>
@@ -163,6 +156,6 @@
   </footer>
 
   <script src="js/anti-pwa.js?v=52"></script>
-  <script type="module" src="js/mine.js?v=52"></script>
+  <script type="module" src="js/mine.js?v=53"></script>
 </body>
 </html>

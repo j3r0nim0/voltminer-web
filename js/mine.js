@@ -237,17 +237,10 @@ function startMining() {
   try { localStorage.setItem('voltminer.web.wallet', wallet); } catch (_) { /* ignore */ }
   moLink.href = `https://moneroocean.stream/#/wallet/${encodeURIComponent(wallet)}/overview`;
 
-  // Radical-transparency strip: the exact login the pool sees, the worker id,
-  // and one-click places to check it yourself.
-  const login = `${wallet}+10000`;
-  trWallet.textContent = login;
-  trWorker.textContent = workerId;
+  // The relay in use, and the one-click check on the pool's own dashboard. The
+  // exact login it sends is already in the note next to the form.
   trRelay.textContent = client.bridgeUrl || '—';
   trMo.href = moLink.href;
-  trApi.href = `https://api.moneroocean.stream/miner/${encodeURIComponent(wallet)}/stats`;
-  trApi.textContent = `api.moneroocean.stream/miner/${wallet.slice(0, 10)}…/stats`;
-  if (trCopy) trCopy.hidden = false;
-  refreshStorage();
 
   startBtn.disabled = true;
   stopBtn.disabled = false;
@@ -315,12 +308,8 @@ const SESSION_CAP_MS = 60 * 60 * 1000;
 
 const chargingOnly = document.getElementById('charging-only');
 const cap60 = document.getElementById('cap60');
-const trWallet = document.getElementById('tr-wallet');
-const trWorker = document.getElementById('tr-worker');
 const trRelay = document.getElementById('tr-relay');
 const trMo = document.getElementById('tr-mo');
-const trApi = document.getElementById('tr-api');
-const trCopy = document.getElementById('tr-copy');
 let batteryState = null;
 let capTimer = null;
 
@@ -420,17 +409,6 @@ if (delBtn) {
 }
 const forgetBtn = document.getElementById('forget-wallet');
 if (forgetBtn) forgetBtn.addEventListener('click', (e) => { e.preventDefault(); forgetWallet(); });
-if (trCopy) {
-  trCopy.addEventListener('click', async (e) => {
-    e.preventDefault();
-    if (!trWallet.textContent) return;
-    try {
-      await navigator.clipboard.writeText(trWallet.textContent);
-      trCopy.textContent = 'Copied';
-      setTimeout(() => { trCopy.textContent = 'Copy wallet'; }, 1200);
-    } catch (_) { /* ignore */ }
-  });
-}
 refreshStorage();
 initBattery();
 // Show the relay endpoint before Start too — it is a known value, so there is
