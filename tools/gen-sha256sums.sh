@@ -1,38 +1,25 @@
 #!/usr/bin/env bash
-# Regenerate transparency/SHA256SUMS for every file the site actually serves.
+# Regenerate transparency/SHA256SUMS for every file the site serves.
 #
-# Run from the repo root, then verify against the live host:
 #   tools/gen-sha256sums.sh
-#   sha256sum -c transparency/SHA256SUMS
+#   sha256sum -c transparency/SHA256SUMS     # from the repo root, or on the server
 #
-# Scope: the served tree below, minus tools/ and third_party/ (dev material —
-# the build recipe and the wasm patch are published under transparency/ anyway).
+# The file list comes from tools/served-tree.sh, which is also what the deploy
+# reads — so the hashes cannot describe a different set of files than the one
+# that gets pushed. Run this before committing; tools/deploy.sh runs it for you.
+#
 # Deterministic order, so a diff shows exactly what changed in a deploy.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 OUT=transparency/SHA256SUMS
+HERE="$(dirname "$0")"
 
-{
-  # Pages
-  printf '%s\n' index.html diag.html notices.html
-  # Installability
-  printf '%s\n' manifest.webmanifest sw.js
-  # Styles and icons
-  printf '%s\n' css/styles.css
-  ls icons/*.png 2>/dev/null || true
-  # Site scripts, unminified
-  ls js/*.js 2>/dev/null || true
-  # The wasm binaries themselves (the glue .js sits next to them, unminified)
-  ls js/vendor/randomx/*.js js/vendor/randomx/*.wasm 2>/dev/null || true
-  # Published audit material
-  ls transparency/index.html transparency/verify.md 2>/dev/null || true
-  ls transparency/relay/*.mjs 2>/dev/null || true
-  ls transparency/wasm-patch/*.sh transparency/wasm-patch/*.patch 2>/dev/null || true
-  ls transparency/wasm-patch/src/cpp/*.cpp transparency/wasm-patch/src/cpp/*.hpp 2>/dev/null || true
-} | sort -u | while read -r f; do
-  [ -f "$f" ] || continue
+# A file cannot contain its own hash, so the sums file is deployed but never
+# listed. Everything else in the served tree is fair game, including pages and
+# images that were never covered by the hand-written version of this list.
+tools/served-tree.sh | grep -v '^transparency/SHA256SUMS$' | while IFS= read -r f; do
   printf '%s  %s\n' "$(shasum -a 256 "$f" | cut -d' ' -f1)" "$f"
 done > "$OUT"
 
-echo "wrote $OUT ($(wc -l < "$OUT" | tr -d ' ') files)"
+printf 'wrote %s (%s files)\n' "$OUT" "$(wc -l < "$OUT" | tr -d ' ')"

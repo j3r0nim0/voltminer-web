@@ -47,8 +47,28 @@ Served from our own VPS (Caddy + the relay), not GitHub Pages — the pthread bu
 - **Bump `VERSION` in `sw.js` (and the `?v=` on every script) on each deploy.** The worked
   example is `55`. The version string is what makes the worker detect its own update and
   what makes the offline shell re-precache instead of serving last deploy's HTML offline.
-- Regenerate the published hashes after any change: `tools/gen-sha256sums.sh`, then
-  `sha256sum -c transparency/SHA256SUMS` on the server.
+  `tools/deploy.sh` refuses to run if any script is on a different `?v=` than `sw.js`.
+
+## Deploy
+
+```bash
+tools/deploy.sh --dry-run     # check and stage; change nothing
+tools/deploy.sh               # push, verify, reload caddy if it changed
+```
+
+It aborts on the first failure, and the things it checks are the things that have already
+gone wrong here by hand: a stale `?v=` on one script, the published C++ mirror drifting
+from the C++ that was actually compiled, and a deploy nobody verified. Before pushing it
+tars the current site to `/root/voltminer-web-backup-<timestamp>.tar.gz` and prints the
+restore command, because verification happens after the push — and afterwards it runs
+`sha256sum -c transparency/SHA256SUMS` **on the server** and aborts if any file disagrees
+with what was published. Env overrides: `HOST`, `WEB_ROOT`, `SSH_KEY`.
+
+The file list has one definition, `tools/served-tree.sh`, read by the deploy, the hash
+generator and the version check. Nothing else knows which files the site contains, so the
+published hashes cannot describe a different set of files than the one that got pushed.
+`tools/gen-sha256sums.sh` regenerates the hashes on its own if you want them without
+deploying; the sums file is deployed but never hashes itself.
 
 ## Layout
 
@@ -60,9 +80,14 @@ Served from our own VPS (Caddy + the relay), not GitHub Pages — the pthread bu
 | `js/mine.js` | UI; `js/miner-client.js` stratum + lifecycle; `js/miner-worker.js` hashing |
 | `js/vendor/randomx/*.{js,wasm}` | Committed builds (pthread + single-thread) |
 | `third_party/WebRandomX-overlay/` | The C++ we compile; `build-web-randomx-mt.sh` rebuilds the wasm |
+| `transparency/wasm-patch/` | Published copy of that C++, checked identical on every deploy |
+| `tools/served-tree.sh` | The one definition of what the site serves |
+| `tools/deploy.sh` | Push + verify + reload; run this rather than rsync by hand |
+| `tools/gen-sha256sums.sh` | Regenerate `transparency/SHA256SUMS` from the served tree |
 | `tools/web-stratum-bridge/` | The relay hop (see its own README) |
 | `tools/rx-replay/` | Offline native-vs-Wasm hash reproduction (does not mine) |
 | `tools/dev-server.mjs` | Static server with COOP/COEP for local work |
+
 
 ## Local preview
 
