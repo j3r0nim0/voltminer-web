@@ -124,6 +124,41 @@ footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; g
 footer a { color: var(--muted); }
 footer a:hover { color: var(--text); }
 
+/* ── PWA: install affordance, update banner, standalone layout ─────────
+   js/pwa.js unhides #install only where installing is actually possible, so
+   nothing here needs to be hidden by default beyond the `hidden` attribute. */
+.install-row {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; max-width: 620px; margin: 0 auto;
+}
+.install-row .note { margin-top: 0; text-align: left; }
+html.is-standalone .install-row { display: none; }
+
+.sw-update {
+  position: sticky; top: calc(64px + env(safe-area-inset-top, 0px)); z-index: 9;
+  background: var(--volt); color: #1a1500;
+  border-bottom: 1px solid var(--bg);
+}
+.sw-update .wrap {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; padding-top: 10px; padding-bottom: 10px;
+  font-size: .92rem; font-weight: 700;
+}
+.sw-update .btn { background: #1a1500; color: var(--volt); flex: none; }
+.sw-update .btn:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.35); }
+
+/* Installed on iOS the status bar is translucent and the home indicator sits
+   over the page, so both ends need the safe-area inset. The status bar text
+   iOS paints is white, which is why the theme is dark rather than inverted. */
+@supports (padding: env(safe-area-inset-top)) {
+  html.is-standalone header.nav { padding-top: env(safe-area-inset-top); }
+  html.is-standalone .wrap {
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+  }
+  html.is-standalone footer { padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
+}
+
 @media (max-width: 640px) {
   .nav nav a:not(.btn) { display: none; }
   .hero { padding: 60px 0 44px; }

@@ -21,14 +21,42 @@ Served from our own VPS (Caddy + the relay), not GitHub Pages — the pthread bu
 - Every solved share is re-hashed with the single-VM `_randomx_hash` before it is
   submitted (`verifySolved()` in `js/miner-worker.js`); a mismatch is dropped and logged
   rather than sent to the pool.
-- No service worker, no PWA, no install prompt. `index.html` unregisters any service
-  worker left over from an earlier version so it cannot serve a stale `mine.js`.
+- Ships a service worker (`sw.js`), so it installs to the Home Screen on Android and
+  iOS. This is the deliberate reversal of the old `js/anti-pwa.js`, which unregistered
+  workers so the page could never serve a stale copy of itself. The guard moved into the
+  worker instead: **navigations are network-first**, so while you are online the HTML is
+  never stale, and a new worker is only activated when the visitor taps Reload.
+- `diag.html` reports what the device actually supports — isolation, `SharedArrayBuffer`,
+  service worker and cache state, OPFS, and a fixed RandomX reference vector hashed with
+  whichever wasm build the device can run. iOS has no console, so this page is the test
+  instrument.
+
+## Install (PWA)
+
+`manifest.webmanifest` + `sw.js` + `js/pwa.js` make the page an installable app:
+
+- **Android / desktop Chromium** — the native `beforeinstallprompt` is captured and the
+  install button appears only once the browser says installing is possible.
+- **iOS** — Safari has no install API, so the page shows `Share → Add to Home Screen`
+  instructions. A Home Screen app gets its own storage container, so the wallet is pasted
+  once more, and it mines only while it is open in front of it.
+- The CSP must allow the manifest or none of this works: `manifest-src 'self'` is set in
+  `tools/server/Caddyfile` because `default-src 'none'` would otherwise block it.
+- `sw.js` is served `no-store` — a service worker that can be pinned stale is a service
+  worker that can never be fixed on an installed device.
+- **Bump `VERSION` in `sw.js` (and the `?v=` on every script) on each deploy.** The worked
+  example is `55`. The version string is what makes the worker detect its own update and
+  what makes the offline shell re-precache instead of serving last deploy's HTML offline.
+- Regenerate the published hashes after any change: `tools/gen-sha256sums.sh`, then
+  `sha256sum -c transparency/SHA256SUMS` on the server.
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `index.html`, `notices.html`, `css/`, `icons/` | The site |
+| `diag.html`, `js/diag.js` | On-device diagnostics report (no mining, no network) |
+| `sw.js`, `manifest.webmanifest`, `js/pwa.js` | Installability: worker, manifest, install/update UI |
 | `js/mine.js` | UI; `js/miner-client.js` stratum + lifecycle; `js/miner-worker.js` hashing |
 | `js/vendor/randomx/*.{js,wasm}` | Committed builds (pthread + single-thread) |
 | `third_party/WebRandomX-overlay/` | The C++ we compile; `build-web-randomx-mt.sh` rebuilds the wasm |
@@ -44,6 +72,8 @@ node tools/dev-server.mjs          # http://127.0.0.1:8099 (COOP/COEP on)
 
 Without COOP/COEP the page falls back to the single-thread wasm and cache-only hashing.
 The relay allows loopback origins, so a local page can still reach the real pool.
+`127.0.0.1` counts as a secure context, so the service worker, the manifest and the
+install prompt all work locally — check DevTools → Application → Service Workers.
 
 ## Licences
 
@@ -57,10 +87,14 @@ Full texts: `notices.html` and `js/vendor/randomx/NOTICE.txt`.
 - **Same-origin relay.** The page opens one WebSocket to `wss://web.voltminer.net/stratum`, proxied by
   Caddy to the relay on `127.0.0.1:8787` — one host, so `connect-src 'self'` is enough. The old
   `bridge.voltminer.net` endpoint still works but is no longer used by the page.
-- **Strict CSP.** `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'`, plus
+- **Strict CSP.** `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; manifest-src 'self'`, plus
   `Permissions-Policy`, HSTS, `X-Frame-Options: DENY`, COOP/COEP/CORP. The wasm glue is loaded with
   `importScripts` (not `eval`) so no `'unsafe-eval'` is needed. Headers are versioned in
   `tools/server/Caddyfile`.
+- **The offline cache is the page's own files.** The service worker caches this origin's HTML, JS,
+  CSS and icons and nothing else — there is no third-party entry it *could* store, because the CSP
+  forbids third-party requests. It is inspectable in DevTools → Application, and clearable from the
+  page with "Delete cached dataset" + "Forget my wallet" + clearing site data.
 - **Consent affordances.** Start-only hashing, "Delete cached dataset" and "Forget my wallet" buttons,
   a live "Pool login / Worker id / Relay / Stored here" strip, links to the pool dashboard and API for
   the address, charging-only default, and a 60-minute session cap default. Default is 2 threads, not all.

@@ -90,11 +90,26 @@ export function canShareDataset() {
   return typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
 }
 
+/** iPhone/iPad, every browser on them, because they are all WebKit.
+    iPadOS 13+ reports itself as "MacIntel" with touch points, hence the second
+    branch — the UA string alone misses iPads entirely. */
+export function isIOS() {
+  try {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  } catch { /* no navigator (worker, tests) */ }
+  return false;
+}
+
 export function defaultThreadCount() {
   // Deliberately restrained: 2 threads even on a big machine (the ceiling is
   // still 4, and the slider is right there). A miner that grabs every core by
   // default is the thing people are right to be suspicious of.
   if (!canShareDataset()) return 1;
+  // iOS gets one thread whatever it reports. It refuses the ~2 GB fast dataset
+  // and reclaims Wasm memory aggressively when the app is backgrounded, so the
+  // extra pthreads buy nothing and cost stability on a phone.
+  if (isIOS()) return 1;
   return hardwareThreads() >= 4 ? 2 : 1;
 }
 
@@ -505,7 +520,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=51', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=55', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');

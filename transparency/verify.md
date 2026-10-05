@@ -19,12 +19,15 @@ else's address on the MoneroOcean dashboard.
 
 ## Audit it in five minutes
 
-1. **Read what runs.** `index.html` and the three scripts in `js/` are not
-   minified: view-source, or `curl https://web.voltminer.net/js/miner-worker.js`.
+1. **Read what runs.** Every file is served unminified: view-source, or e.g.
+   `curl https://web.voltminer.net/js/miner.js`. The page is `index.html`; the
+   logic is `js/mine.js` (UI), `js/miner-client.js` (stratum + lifecycle),
+   `js/miner-worker.js` (hashing), `js/pwa.js` (install + update) and `sw.js`
+   (the offline cache). `diag.html` prints what a device supports.
 2. **Check that no third-party code can load.** The response headers pin it:
    `curl -sI https://web.voltminer.net/ | grep -i content-security-policy`
-   — `default-src 'none'; script-src 'self'; connect-src 'self' …`. There is no
-   analytics, no CDN, no remote import, no inline script.
+   — `default-src 'none'; script-src 'self'; connect-src 'self'; manifest-src 'self' …`.
+   There is no analytics, no CDN, no remote import, no inline script.
 3. **Check the bytes you were served.**
    `curl -s https://web.voltminer.net/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256`
    and compare with `SHA256SUMS` in this folder.
@@ -42,6 +45,22 @@ else's address on the MoneroOcean dashboard.
 6. **Check the payout.** The page prints the exact login it sent
    (`<your wallet>+10000`) and links the pool's own dashboard and API for that
    address. That number is the ground truth, not our word.
+7. **Inspect the offline copy.** `sw.js` is the whole cache policy and it is
+   short: navigations go to the network first (so the page is never stale while
+   you are online), sub-resources are served from cache while being refreshed,
+   and `/stratum` is never touched. The cache holds this origin's own files and
+   nothing else — it cannot hold anything else, because the CSP forbids
+   third-party requests. See it under DevTools → Application → Cache Storage, or
+   clear it with the buttons on the page plus clearing site data.
+
+## What the app cache stores
+
+Two caches, both named `vmw-*`, both filled only from this origin: the app shell
+(the HTML, the stylesheet, the icons, and the manifest) and the assets you
+actually requested. Nothing about you is in either one. Installing to the Home
+Screen adds no storage the page did not already have — on iOS it is even a
+*separate* container from the browser's, so the app starts with a fresh wallet
+field.
 
 ## What is not published
 

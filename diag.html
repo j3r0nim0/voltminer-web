@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Device diagnostics — VoltMiner Browser Experiment</title>
+  <meta name="theme-color" content="#0a1226" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="css/styles.css?v=55" />
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <span class="brand" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner</span>
+      <nav>
+        <a href="./">Browser Experiment</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section style="padding-top:36px;">
+      <div class="wrap">
+        <span class="pill">Diagnostics · read-only · nothing is uploaded</span>
+        <h1 style="font-size:1.8rem;font-weight:850;margin:8px 0 10px;">Device diagnostics</h1>
+        <p class="note" style="font-size:.95rem;">Open this page in <strong>Safari on the iPhone</strong>, wait a few seconds for the hash test to finish, then tap <strong>Copy report</strong> and send the text back. This page <strong>does not mine</strong> and <strong>does not send anything anywhere</strong> — it only measures the device and prints a report.</p>
+
+        <div class="card" style="margin-top:18px;">
+          <div style="position:sticky;top:72px;z-index:5;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--bg-2);padding:4px 0 12px;border-bottom:1px solid var(--border);">
+            <button class="btn" id="run" type="button">Run hash test</button>
+            <button class="btn ghost" id="copy" type="button">Copy report</button>
+            <span class="muted" id="hash-status"></span>
+          </div>
+          <p class="note" id="copy-status" role="status" aria-live="polite" style="min-height:1.2em;margin:8px 0 0;"></p>
+          <pre id="report" class="mono" style="white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:68vh;margin:10px 0 0;">loading…</pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div>⚡ VoltMiner — Browser Experiment. 0% fee: we take no cut of your shares.</div>
+      <div class="muted">Diagnostics page. No third-party requests, no analytics.</div>
+    </div>
+  </footer>
+
+  <!-- pwa.js first: it registers the service worker, so the report below shows
+       the real registration, cache and standalone state instead of "0 regs"
+       simply because this page was opened first. -->
+  <script src="js/pwa.js?v=55"></script>
+  <script src="js/diag.js?v=55" defer></script>
+</body>
+</html>

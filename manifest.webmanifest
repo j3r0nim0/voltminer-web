@@ -1,0 +1,36 @@
+{
+  "name": "VoltMiner — Browser Experiment",
+  "short_name": "VoltMiner",
+  "description": "RandomX in a Web Worker. Shares go straight to your own MoneroOcean wallet. VoltMiner takes 0%; the pool may charge its own fee.",
+  "id": "./",
+  "start_url": "./?src=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0a1226",
+  "theme_color": "#0a1226",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["utilities", "finance"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

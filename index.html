@@ -2,13 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- viewport-fit=cover: the installed app draws under the notch and the home
+       indicator, and the CSS pads by env(safe-area-inset-*) to compensate. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Browser Experiment — VoltMiner</title>
-  <meta name="description" content="VoltMiner Browser Experiment: RandomX in a Web Worker, shares paid straight to your own MoneroOcean wallet. 0% fee from us. Made for desktops, laptops and Chromebooks." />
+  <meta name="description" content="VoltMiner Browser Experiment: RandomX in a Web Worker, shares paid straight to your own MoneroOcean wallet. 0% fee from us. Installs to your Home Screen on Android and iPhone/iPad." />
   <meta name="theme-color" content="#0a1226" />
+
+  <!-- Installable app. Both iOS meta spellings are here on purpose: iOS still
+       reads the apple-prefixed ones, everyone else reads mobile-web-app-capable. -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VoltMiner" />
+
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="css/styles.css?v=55" />
 </head>
 <body>
   <header class="nav">
@@ -20,6 +31,15 @@
     </div>
   </header>
 
+  <!-- Update banner. Shown only by js/pwa.js, and only when a *new* worker is
+       waiting on an already-controlled page — never on first install. -->
+  <div id="sw-update" class="sw-update" hidden>
+    <div class="wrap">
+      <span>A new version of this page is ready.</span>
+      <button class="btn" id="sw-update-btn" type="button">Reload</button>
+    </div>
+  </div>
+
   <section class="hero" style="padding-bottom:36px;">
     <div class="wrap">
       <span class="pill">Experimental · Opt-in · Non-custodial · 0% fee</span>
@@ -28,6 +48,22 @@
         and sends shares to <strong>MoneroOcean</strong> under <em>your</em> wallet. We take
         <strong>0%</strong> — no cut of your hashrate, no redirected shares (the pool may charge
         its own fee). Expect toy H/s. A hidden tab stops hashing.</p>
+
+      <!-- Install affordance. Hidden by default and driven entirely by js/pwa.js:
+           Chromium gets the native beforeinstallprompt, iOS Safari gets the
+           Share → Add to Home Screen instructions, everything else stays hidden. -->
+      <div id="install" class="install-row" hidden>
+        <button class="btn ghost" id="install-btn" type="button" data-ios-label="Get the app">Install as app</button>
+        <div class="note" id="install-ios" hidden>
+          <strong>iPhone / iPad:</strong> tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.
+          It opens full-screen with no address bar. Its storage is separate from Safari's, so you paste your
+          wallet once more — and it mines only while it is open in front of you.
+        </div>
+        <div class="note" id="install-ios-alt" hidden>
+          This browser on iOS cannot install web apps. Open
+          <span class="mono">web.voltminer.net</span> in <strong>Safari</strong> to add it to the Home Screen.
+        </div>
+      </div>
     </div>
   </section>
 
@@ -40,7 +76,9 @@
           <li><strong>Your wallet, your coins.</strong> The address goes to the pool as the stratum login. VoltMiner never holds XMR.</li>
           <li><strong>0% fee.</strong> We take no cut of the hashrate and never swap your payout address. MoneroOcean may apply its own pool fee.</li>
           <li><strong>Ad-blockers will fight this.</strong> uBlock Origin and some antivirus flag Wasm miners even with consent. Pause them on this page or the WebSocket never opens.</li>
-          <li><strong>Desktop browser.</strong> Fast mode pins about 3.5 GB inside the tab, so 8 GB machines may swap or fall back to cache-only mode. iOS and Safari usually suspend the worker.</li>
+          <li><strong>Desktop and Android first.</strong> Fast mode pins about 3.5 GB inside the tab, so 8 GB machines may swap or fall back to cache-only mode.</li>
+          <li><strong>iPhone / iPad runs, slowly.</strong> It installs to the Home Screen and hashes, but iOS refuses the ~2 GB fast-mode dataset, so it stays in light mode — and it only runs while the app is open in front of you. Lock the screen and it stops.</li>
+          <li><strong>It runs as an app, not a background service.</strong> Installed, it opens full-screen with no address bar and works offline from its own cache. Closing it stops the hashing; nothing keeps running behind your back.</li>
           <li><strong>One dataset, extra cores.</strong> This page is cross-origin isolated, so the C++ pthreads share a single ~2 GB dataset — each extra thread adds only its scratchpad. Interpreted Wasm: tens of H/s, not thousands.</li>
           <li><strong>Keep the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can get the relay rate-limited.</li>
           <li><strong>RandomX, interpreted.</strong> Same algorithm family as native miners (<code>rx/0</code>), but no huge pages and no JIT in Wasm.</li>
@@ -119,6 +157,7 @@
               <li>Send shares to MoneroOcean with <em>your</em> address as the pool login — the one you typed.</li>
               <li>Write one thing to this site's private storage: a ~2 GB RandomX dataset cache, reused so it is not rebuilt every visit.</li>
               <li>Remember two small things locally: your address, and the <span class="mono">VMW-…</span> worker id.</li>
+              <li>Keep a copy of <em>its own</em> files — this page, its script, its stylesheet, its icons — in one on-device cache, so the app opens offline. That cache holds nothing from anyone else.</li>
               <li>Open a single WebSocket to this site's own relay, which forwards bytes to the pool unchanged.</li>
             </ul>
           </div>
@@ -126,7 +165,8 @@
             <strong>It does not</strong>
             <ul>
               <li>Ask for a seed phrase or private key. Ever. Anyone who does is stealing from you.</li>
-              <li>Mine before you press Start, mine with the tab closed, install anything, or run as a background service.</li>
+              <li>Mine before you press Start, or keep mining once the tab or app is closed.</li>
+              <li>Install a system service or a background agent. "Add to Home Screen" is a shortcut, a full-screen window and a cache of this page — nothing runs when it is shut.</li>
               <li>Load third-party scripts, fonts, analytics or ads — the CSP header forbids it (<span class="mono">default-src 'none'</span>).</li>
               <li>Use cookies, or ask for camera, microphone, location or your files.</li>
               <li>Touch anyone's coins: mining pays the address you pasted, and no key is ever involved.</li>
@@ -138,6 +178,11 @@
           — published hashes, the wasm patch, the build recipe and the relay's source live in
           <a href="transparency/">/transparency</a>. The relay rewrites nothing, so a redirected payout would show up as
           somebody else's address on the MoneroOcean dashboard.</p>
+        <p class="note">The offline copy is inspectable too: a browser keeps it under
+          <strong>DevTools → Application → Service Workers and Cache Storage</strong>, and a phone keeps it under
+          <strong>Settings → Safari → Advanced → Website Data</strong>. Diagnose the device instead of guessing —
+          <a href="diag.html">/diag.html</a>. If you ever want it gone, <strong>Delete cached dataset</strong> plus
+          <strong>Forget my wallet</strong> plus clearing site data removes every byte this page stored.</p>
       </div>
     </div>
   </section>
@@ -146,6 +191,9 @@
     <div class="wrap">
       <div>⚡ VoltMiner — Browser Experiment. 0% fee: we take no cut of your shares.</div>
       <div>
+        <a href="./">Browser Experiment</a> ·
+        <a href="diag.html">Device diagnostics</a> ·
+        <a href="transparency/">Transparency</a> ·
         <a href="https://voltminer.net/about.html">About Us</a> ·
         <a href="notices.html">Third-party notices</a>
       </div>
@@ -153,7 +201,10 @@
     </div>
   </footer>
 
-  <script src="js/anti-pwa.js?v=52"></script>
-  <script type="module" src="js/mine.js?v=54"></script>
+  <!-- Replaces js/anti-pwa.js. That file unregistered service workers so the page
+       could never serve a stale copy of itself; the page installs as an app now,
+       so the guard moved into sw.js (network-first navigations) instead. -->
+  <script src="js/pwa.js?v=55"></script>
+  <script type="module" src="js/mine.js?v=55"></script>
 </body>
 </html>
