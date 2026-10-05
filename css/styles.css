@@ -69,7 +69,7 @@ header.nav {
   background: radial-gradient(closest-side, rgba(255,210,30,0.12), transparent);
   pointer-events: none;
 }
-.hero h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 850; letter-spacing: -1px; }
+.hero h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 850; letter-spacing: -1px; overflow-wrap: break-word; }
 .hero h1 .volt { color: var(--volt); }
 .hero p.sub { color: var(--muted); font-size: 1.2rem; max-width: 640px; margin: 18px auto 28px; }
 .hero .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
@@ -275,7 +275,13 @@ html.is-standalone .install-row { display: none; }
 }
 .mine-stats .k { display: block; color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .4px; }
 .mine-stats .v { font-weight: 800; font-variant-numeric: tabular-nums; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+/* Monospace runs here include a whole curl command and 64-char hex. A single
+   unbreakable token was dragging the page 82px wider than a 360px phone, which
+   is worse in the installed app because there is no address bar to scroll past. */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .9em; overflow-wrap: anywhere;
+}
 .muted { color: var(--muted); font-weight: 600; font-size: .85rem; }
 .hash-log-wrap { margin-top: 18px; }
 .hash-log-head {

@@ -61,15 +61,25 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git repository
 # One stale ?v= on one script ships a mixed build: today's page loading an
 # earlier deploy's miner-client.js. Cheap to check, invisible to find later.
 say "1. deploy version"
+# The version is written down in four spellings: the ?v= query strings, sw.js's
+# VERSION, js/pwa.js's VERSION and js/diag.js's "diag vNN". The first version of
+# this check only looked at ?v=, which let js/pwa.js sit on 55 while everything
+# else moved to 56 — harmless that time, but the same blind spot would hide a
+# genuinely stale script.
 VER_FILES=$(tools/served-tree.sh | grep -E '\.(html|js)$' | grep -v '^js/vendor/' || true)
-VERSIONS=$(printf '%s\n' "$VER_FILES" | xargs grep -hoE '\?v=[0-9]+' 2>/dev/null | sed 's/?v=//' | sort -u | tr '\n' ' ' || true)
+VER_SOURCES='sw.js js/pwa.js js/diag.js'
+collect_versions() {
+  printf '%s\n' "$VER_FILES" | xargs grep -HoE '\?v=[0-9]+' 2>/dev/null
+  grep -HoE "const VERSION = '[^']*'" $VER_SOURCES 2>/dev/null
+}
+VERSIONS=$(collect_versions | grep -oE '[0-9]+' | sort -u | tr '\n' ' ')
 VER_COUNT=$(printf '%s' "$VERSIONS" | wc -w | tr -d ' ')
-[ "$VER_COUNT" -eq 1 ] || die "?v= must be one value, found: ${VERSIONS:-none}. Which file is stale:
-$(printf '%s\n' "$VER_FILES" | xargs grep -HoE '\?v=[0-9]+' 2>/dev/null | sed 's/^/    /')"
+[ "$VER_COUNT" -eq 1 ] || die "the deploy version must be one value everywhere, found: ${VERSIONS:-none}
+$(collect_versions | sed 's/^/    /')"
 VER=$(printf '%s' "$VERSIONS" | tr -d ' ')
 SW_VER=$(grep -oE "const VERSION = '[0-9]+'" sw.js | grep -oE '[0-9]+' || true)
 [ "$SW_VER" = "$VER" ] || die "sw.js VERSION ($SW_VER) != script ?v= ($VER). The worker would not see its own update, and the offline shell would re-precache under the old name."
-ok "?v=$VER everywhere, matches sw.js VERSION"
+ok "?v=$VER everywhere, matches sw.js, js/pwa.js and js/diag.js"
 
 # Untracked files get published too (otherwise a brand-new file 404s while the
 # page that references it ships). Say so out loud rather than quietly shipping

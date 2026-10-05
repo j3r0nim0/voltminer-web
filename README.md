@@ -45,7 +45,7 @@ Served from our own VPS (Caddy + the relay), not GitHub Pages — the pthread bu
 - `sw.js` is served `no-store` — a service worker that can be pinned stale is a service
   worker that can never be fixed on an installed device.
 - **Bump `VERSION` in `sw.js` (and the `?v=` on every script) on each deploy.** The worked
-  example is `55`. The version string is what makes the worker detect its own update and
+  example is `57`. The version string is what makes the worker detect its own update and
   what makes the offline shell re-precache instead of serving last deploy's HTML offline.
   `tools/deploy.sh` refuses to run if any script is on a different `?v=` than `sw.js`.
 
