@@ -1,0 +1,178 @@
+# Browser miner — backlog
+
+Thread: **browser miner** (`voltminer-web`, `web.voltminer.net`).
+Sibling thread: **Anvil/Android** (`android-xmrig-monero/TODO.md`, performance track).
+
+Split on 2026-10-06 because the two share a source lineage and almost nothing else.
+Rule for this file: every item carries the evidence that put it here, so nobody has to
+re-derive it. Items are ordered by expected value, not by ease.
+
+---
+
+## A. Hash rate — the big lever
+
+### A1. We run the interpreter. Theirs runs a JIT. This is the gap.
+
+`wasm32` falls into RandomX's fallback branch, so `vm_compiled.cpp` links as a no-op:
+
+```c
+// common.hpp
+#if defined(_M_X64) || defined(__x86_64__)   → JitCompilerX86,  HAVE_COMPILER 1
+#elif defined(__aarch64__)                   → JitCompilerA64,  HAVE_COMPILER 1
+#elif defined(__riscv) && __riscv_xlen == 64 → JitCompilerRV64, HAVE_COMPILER 1
+#else                                        → JitCompilerFallback, HAVE_COMPILER 0   ← us
+```
+
+`randomx.cpp` then does `flags = RANDOMX_HAVE_COMPILER ? RANDOMX_FLAG_JIT : RANDOMX_FLAG_DEFAULT`,
+so we never even ask for it. We ship `vm_compiled.cpp` and it is inert.
+
+`aa022/RandomX-bonanza` solved this properly: a **wasm emitter as a JIT backend** — LEB128
+encoder, instruction encoder, generator, decoder (`wasm_jit_leb128.c`, `wasm_jit_inst.c`,
+`wasm_jit_gen.c`, `wasm_jit_decode.c`, `wasm_jit_compiler.cpp`), plus a static fused path
+(`wasm_jit_superscalar.cpp` + a 260 KB `wasm_jit_fuse_table.h`) and a generated threaded
+interpreter. Live, not aspirational — exports `_rxjit_stat_dyn_compile_us`,
+`_rxjit_set_shared_code`, `_rxjit_stat_module_hash` / `_same` / `_mismatch`.
+
+Their numbers vs ours (not same-machine, but the per-thread ratio is not close):
+
+| | bonanza | us |
+|---|---|---|
+| full, 1 thread | 175 H/s (25% of native) | — |
+| full, 4 threads | 647 H/s | ~110 H/s |
+| light, 1 thread | 47 H/s (**66% of native**) | — |
+| wasm payload | 398 KB + 51 KB glue | 102 KB + 26 KB |
+
+We are *smaller* because we left the JIT out. Their extra ~220 KB buys 3–6×.
+
+**Licence: CC0** (public-domain dedication) — the code is adoptable. Caveat: check per-file
+provenance, the semifloat stubs come from l1mey112's `randomx.js` with their own terms.
+
+### A2. Measure the delta before porting anything
+
+Build theirs, run **our** canonical vector (`30aed56e…` for an all-zero seed/blob, nonce
+`01000000` — already pinned in `diag.js`) and a plain hash loop, and compare H/s on this
+machine, same browser, same threads. Cheap, and it decides whether A1 is a project or a
+weekend. Do this first.
+
+### A3. Thread counting on ARM: count performance cores, not cores
+
+On Apple Silicon and modern Android, `navigator.hardwareConcurrency` includes efficiency
+cores. Spawning that many workers is *slower* than using half. Bonanza ships this as
+`optimizeArm` ("full mode on ARM: count half the cores"). We currently take the naive count.
+
+### A4. The no-SharedArrayBuffer path to full-dataset speed
+
+Bonanza's replica mode: independent workers that each hold their own ~2.3 GB dataset
+(`1F+3` = 293 H/s, `2F+2` = 417 H/s, weighting a replica at ~2.25× a light worker). **No
+COOP/COEP, no SharedArrayBuffer, no pthreads.** 
+
+Strategically this matters more than the raw number: our entire fast path currently
+*requires* cross-origin isolation, and COEP is what makes embeds awkward and is a live
+suspect in the iOS standalone question (C3). This would make isolation an optimisation
+rather than a precondition.
+
+---
+
+## B. Delivery and hosting
+
+### B1. The wasm ships uncompressed
+
+```
+/js/vendor/randomx/web-randomx-mt.wasm   102,182 B   content-type: application/wasm
+                                          ↑ no content-encoding
+```
+
+HTML/CSS/JS all get gzip (`encode gzip` in `tools/server/Caddyfile`); `application/wasm`
+does not. First visit is 136 KB as served, of which 102 KB is that file. Gzip or
+precompressed variants roughly halve first load to ~70 KB. Repeat visits are already free —
+the service worker serves them from cache.
+
+### B2. `MAX_SESSIONS = 8`, and the ninth user fails silently
+
+`Environment=BRIDGE_MAX_SESSIONS=8` in `/etc/systemd/system/voltminer-bridge.service`.
+Rejected, not queued. Needs a "relay full" state in the client, not a generic connect error.
+
+### B3. Ask MoneroOcean for their per-IP connection limit before raising B2
+
+Every session egresses from one address (`137.184.209.157`), so the pool sees N connections
+from one IP. Pools commonly cap that per IP — our own client code already says *"pool IP-bans
+fast logins"*, learned the hard way this project. Also a shared-fate risk: one misbehaving
+client can get the IP banned for everybody. Scaling out means more egress IPs, not a bigger
+VPS.
+
+### B4. VPS headroom (measured 2026-10-06)
+
+1 shared vCPU (`DO-Regular`), 458 MB RAM / 283 MB available, **65 MB already in swap while
+idle**, disk 46%. The relay does no hashing — hashing is client-side — so the marginal cost
+per session is ~30–60 KB of RSS and ~1–2 KB/min of traffic (~65 MB/month per 24/7 user;
+the DO tier includes ~1 TB, so bandwidth is irrelevant). Estimated ceiling **~1,000–3,000
+concurrent sessions, RAM-bound and not verified under load**. Message rate at 1,000 sessions
+is ~14 msg/s of JSON — nothing. The CPU risk is a TLS handshake storm, not steady state.
+
+The estimate is unverified because a real load test from this IP would trip B3. Needs a
+second IP before it can be measured properly.
+
+---
+
+## C. Mobile — tabled, waiting on one artifact
+
+### C1. iOS PWA mining didn't work; Android does
+
+Same wasm, same service worker, same page, same relay, verified working on Android. That
+narrows it to WebKit, but there are two very different branches and they look identical from
+the outside:
+
+- **never started hashing** — something WebKit-specific (pthread spawn in standalone, wasm
+  memory growth, OPFS quota); or
+- **started fine, hadn't found a share yet** — iOS is pinned to light mode, and light mode on
+  a phone is minutes-to-first-share, not seconds.
+
+Answer is in the hash log / status readout. `diag.html` → **Copy report** on the iPhone
+settles it; that report is the one artifact never captured from either device.
+
+Worth knowing before digging: bonanza reports **Safari at ~800 H/s in full mode** versus
+Chrome's ~850–880, and works around JavaScriptCore's lack of relaxed SIMD by compiling the
+relaxed-SIMD AES into a **separate side module**, embedding the bytes in the wasm as a
+header, and instantiating it at runtime ("randomx.wasm itself must stay relaxed-free for
+JSC"). So WebKit is not inherently the answer — this can work.
+
+### C2. We are pinned to light mode on iOS for memory reasons
+
+One thread, `defaultThreadCount()` returns 1 on iOS. If C1 turns out to be "slow, not
+broken", A1 is the fix: light mode is exactly where the interpreter hurts most.
+
+---
+
+## D. Correctness — same neighbourhood, not optimisation
+
+### D1. Our rounding fix patched a symptom; theirs avoids the cause
+
+We made RandomX's process-global FP-mode globals `__thread` so concurrent VMs can't clobber
+each other. Bonanza never depends on the host FP rounding mode: explicit `wasm_softround.h`
++ `jit_stubs/semifloat.{c,h}`, exports `_rxSoftroundAdd/Sub/Mul/Div/Sqrt` and
+`_rxGetRoundingModePtr`, credited to l1mey112's semifloat. Worth knowing if that code is
+touched again — their design has no shared mutable state to clobber.
+
+### D2. Keep the self-check
+
+`verifySolved()` re-hashes every solved share with the single-VM path and drops it if the
+result isn't the hash of the nonce it reported. That is the guard that turns this entire
+class of bug from *"every share silently rejected"* into a visible, loud drop. Do not remove
+it when touching the worker.
+
+---
+
+## Not this thread
+
+- **Fee stripping / `FeeScheduler` removal** — the Flutter product (`voltminer`), Android thread.
+- **GPL-3 propagation** for an APK embedding Anvil/RandomX — Android thread.
+- **GAMIFIED headline stuck behind Cloudflare's HTML cache** (`cf-cache-status: HIT`,
+  un-purgeable from the CLI) — `voltminer.net` product site, needs dashboard → Purge
+  Everything. Same repo as the fee work, not the browser miner.
+
+## Loose ends to resolve
+
+- **The relay now exists twice**: tracked in `voltminer-web/tools/web-stratum-bridge/` and
+  untracked in `voltminer/tools/web-stratum-bridge/` (208 K). This is the same
+  hand-synced-duplicate hazard as `transparency/wasm-patch` vs `third_party/`. Decide the
+  canonical copy (this repo — it is deployed from here) and delete the other.

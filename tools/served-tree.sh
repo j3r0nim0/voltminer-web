@@ -19,6 +19,10 @@ git ls-files --cached --others --exclude-standard | while IFS= read -r f; do
     # Dev material. The relay source that matters is published under
     # transparency/relay/, and the C++ under transparency/wasm-patch/.
     tools/*|third_party/*) continue ;;
+    # Internal notes. Anything in the repo root is served, so planning
+    # documents live here rather than next to index.html — otherwise a
+    # backlog file about the miner ends up downloadable from the miner.
+    docs/*) continue ;;
     # Served, and they contain a dot: the .well-known directory is part of the
     # security.txt convention, and .nojekyll is kept for the Pages fallback host.
     .well-known/*|.nojekyll) printf '%s\n' "$f" ;;
