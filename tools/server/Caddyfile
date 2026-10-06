@@ -12,7 +12,24 @@ bridge.voltminer.net {
 
 web.voltminer.net {
 	root * /var/www/voltminer-web
-	encode gzip
+	# Caddy's default encode matcher is a list of TEXT-BASED types only
+	# (text/*, application/json*, javascript*, xhtml/atom/rss+xml, image/svg+xml),
+	# so application/wasm was silently skipped and the 102 KB wasm shipped
+	# uncompressed — a third of the first-visit weight. `match` REPLACES the
+	# default, so this restates it and adds wasm. Repeated `header` lines for the
+	# same field are OR'ed, not AND'ed (caddyhttp/matchers.go), so this is a union.
+	encode gzip {
+		match {
+			header Content-Type text/*
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type application/xhtml+xml*
+			header Content-Type application/atom+xml*
+			header Content-Type application/rss+xml*
+			header Content-Type image/svg+xml*
+			header Content-Type application/wasm*
+		}
+	}
 
 	# Same-origin relay: the browser opens ONE socket, to the host it already
 	# trusts, so the CSP can say connect-src 'self'. Origin-locked upstream.

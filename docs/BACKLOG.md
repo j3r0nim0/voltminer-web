@@ -174,6 +174,32 @@ is ~14 msg/s of JSON — nothing. The CPU risk is a TLS handshake storm, not ste
 The estimate is unverified because a real load test from this IP would trip B3. Needs a
 second IP before it can be measured properly.
 
+**Now measured (2026-10-06).** Load test built for this: a TLS **stub pool**, the real
+`server.mjs` retargeted at it by replacing only the three upstream constants — so every line
+of session logic runs *including the certificate pin*, and MoneroOcean is never dialed. Note
+the second-IP idea doesn't actually protect the pool (the *relay* dials it, not the
+generator); not dialing it does. Sessions were held and RSS read from `/proc`.
+
+```
+sessions   RSS kB   fds    per-session
+       0    60408      25   —
+      64    66300     153   92 kB
+     192    74220     409   71 kB
+marginal cost of the 128 added:   61 kB/session
+fds: +128 for 64 sessions, +256 for 192 → exactly 2 per session
+```
+
+**~61 kB per session steady-state, 2 file descriptors.** So the 1,000–3,000 estimate holds
+and the marginal figure supports the top of that range: ~180 MB of headroom ÷ 61 kB ≈
+**2,900 concurrent sessions**. Descriptors (limit 524,288) are not a constraint, and
+bandwidth (~65 MB/month per 24/7 user) is irrelevant against the ~1 TB allowance.
+
+Caveats on that number, honestly: it is *idle* sessions — logged in, holding, but not yet
+forwarding periodic jobs and submits, so real traffic adds some CPU and buffer. And this is
+a 1 vCPU box already 65 MB into swap while idle, so the binding constraint in production
+remains CPU and the pool's per-IP policy (B3), not memory. The remaining unknown is a
+handshake storm, not steady state.
+
 ---
 
 ## C. Mobile — tabled, waiting on one artifact

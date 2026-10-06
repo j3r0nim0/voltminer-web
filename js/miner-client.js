@@ -349,6 +349,24 @@ export class MinerClient {
       this.connected = false;
       this.job = null;
       this.#pauseWorkers();
+
+      // 1013 "Try Again Later" is what the relay sends when every session slot is
+      // taken (server.mjs: ws.close(1013, 'bridge at capacity')) — as opposed to
+      // 1008, which means the origin was refused. Distinguishing it matters: this
+      // one is us, not the user's device, and it clears on its own. It also must
+      // not reuse the normal 15 s cadence: eight waiting tabs retrying at that
+      // rate would pile onto the relay that is already full.
+      if (ev.code === 1013) {
+        const wait = 60000 + Math.floor(Math.random() * 30000);
+        this.#scheduleReconnect(
+          wait,
+          `Relay is full right now — every miner slot is taken. This is on our side, ` +
+            `not your device, and it clears as other people stop. Retrying in ` +
+            `${Math.round(wait / 1000)}s. Hashing paused (dataset kept).`,
+        );
+        return;
+      }
+
       const why = `Disconnected from bridge. code=${ev.code} clean=${ev.wasClean}${ev.reason ? ` reason=${ev.reason}` : ''}. Hashing paused (dataset kept).`;
       this.#emit('status', { message: why });
       if (this.holdReconnectUntil && Date.now() < this.holdReconnectUntil) {
@@ -489,7 +507,7 @@ export class MinerClient {
     }
   }
 
-  #scheduleReconnect(ms) {
+  #scheduleReconnect(ms, note) {
     if (!this.wantRun) return;
     if (this.reconnectTimer) return;
     if (ms == null) {
@@ -503,7 +521,11 @@ export class MinerClient {
       ms = Math.max(ms, this.holdReconnectUntil - Date.now());
     }
     const wait = Math.max(15000, ms);
-    this.#emit('status', { message: `Reconnect in ${Math.round(wait / 1000)}s (pool IP-bans fast logins). Dataset kept.` });
+    // `note` exists so a caller with a better explanation than "a pool did
+    // something" can supply it; the default text names the pool-kick cause.
+    this.#emit('status', {
+      message: note || `Reconnect in ${Math.round(wait / 1000)}s (pool IP-bans fast logins). Dataset kept.`,
+    });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.wantRun) this.#connect();
@@ -520,7 +542,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=57', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=58', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');

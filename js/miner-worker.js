@@ -103,7 +103,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=57', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=58', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -612,8 +612,8 @@ onmessage = function (e) {
     postMessage({
       type: 'status',
       message: dsPhase === 'filling' || dsPhase === 'saving' || dsPhase === 'try'
-        ? 'Pool disconnected. Dataset fill continues (no hashes until we are back).'
-        : 'Pool disconnected. Hashing paused (dataset kept).',
+        ? 'Mining paused. Dataset fill continues (no hashes until we reconnect).'
+        : 'Mining paused (dataset kept).',
     });
   }
   if (data.type === 'resume') {
