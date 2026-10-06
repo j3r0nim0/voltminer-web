@@ -184,6 +184,13 @@ rather than a precondition.
 
 ### B1. The wasm ships uncompressed
 
+> **DONE — fixed and deployed, verified live 2026-10-06.** Landed in `dea130c`. The Caddyfile
+> `encode` matcher now restates Caddy's default text-type list and adds `application/wasm*`.
+> Confirmed on the served file, not in the config:
+> `curl -sI -H 'Accept-Encoding: gzip' https://web.voltminer.net/js/vendor/randomx/web-randomx-mt.wasm`
+> → `content-encoding: gzip`, `content-type: application/wasm`. Left here for the evidence;
+> retire on the next pass through this file.
+
 ```
 /js/vendor/randomx/web-randomx-mt.wasm   102,182 B   content-type: application/wasm
                                           ↑ no content-encoding
@@ -196,8 +203,15 @@ the service worker serves them from cache.
 
 ### B2. `MAX_SESSIONS = 8`, and the ninth user fails silently
 
+> **Client half DONE — fixed and deployed in `dea130c`.** `server.mjs` closes with
+> `1013 'bridge at capacity'`, and `js/miner-client.js:353–363` now recognises it:
+> *"Relay is full right now — every miner slot is taken. This is on our side…"*, with a
+> reconnect policy that deliberately does not pile back onto a full relay. What remains is
+> the number itself: whether 8 is the right cap, which is gated on B3 (the pool's per-IP
+> limit) and on the load figures in B4 (~61 kB/session, 2 fds).
+
 `Environment=BRIDGE_MAX_SESSIONS=8` in `/etc/systemd/system/voltminer-bridge.service`.
-Rejected, not queued. Needs a "relay full" state in the client, not a generic connect error.
+Rejected, not queued.
 
 ### B3. Ask MoneroOcean for their per-IP connection limit before raising B2
 
@@ -244,6 +258,96 @@ forwarding periodic jobs and submits, so real traffic adds some CPU and buffer. 
 a 1 vCPU box already 65 MB into swap while idle, so the binding constraint in production
 remains CPU and the pool's per-IP policy (B3), not memory. The remaining unknown is a
 handshake storm, not steady state.
+
+### B5. Let the user "self-hop" — run the bridge on their own machine
+
+*(Numbered last only because B1/B2 are pending retirement and renumbering a shared doc under
+a concurrent writer is worse than an out-of-order id. By value it leads this section: it
+subsumes B2–B4 for anyone who takes it.)*
+
+The relay is the only part of this chain that has to be somebody's server, and it is the part
+we least want to own — B2, B3 and B4 are all consequences of owning it. Nothing stops the
+visitor from running it themselves. This is already the Android app's architecture: the APK
+dials `gulf.moneroocean.stream:20032` directly (`server.mjs` header comment: *"same as the
+Android app"*) and nobody calls that a server.
+
+**Evidence that this is nearly free to ship — the client already has the hooks:**
+
+- `js/miner-client.js:21` — a page served from `localhost`/`127.0.0.1` resolves its socket to
+  `ws://127.0.0.1:8787` with no configuration.
+- `js/miner-client.js:19` — `?bridgeWs=` overrides the relay for everyone else.
+- `tools/web-stratum-bridge/origin.mjs` — the allowlist already accepts `http://localhost` and
+  `http://127.0.0.1` alongside the public origins.
+- `tools/dev-server.mjs` — already contains the static handler *and* the COOP/COEP headers
+  that make `crossOriginIsolated` true. 63 lines, against the bridge's 192.
+
+**The MoneroOcean case is a zero-code-change path.** The upstream is already a fixed,
+DNS-named, TLS endpoint with a pinned cert:
+
+```
+POOL_HOST = 'gulf.moneroocean.stream'
+POOL_PORT = 20032                                    // TLS twin of 10032
+POOL_TLS_SHA256 = '239daadd…'
+```
+
+So `BRIDGE_ALLOW_INSECURE=1 node server.mjs` on the user's machine is the whole change —
+plus serving the site from the same process (B5's only real work). Login (`wallet+10000`),
+job handling and the difficulty checks do not move at all. The p2pool / arbitrary-upstream
+variant is the one that needs host/port/pin made configurable **and** the wallet field
+re-thought (see below); do MoneroOcean first, because it is free.
+
+**Design constraints, each one learned in the reasoning above:**
+
+- **Loopback is `ws://`, not `wss://`.** A *trusted* cert for `127.0.0.1` means installing a
+  root CA (mkcert et al.) — a bigger ask than running the program, and on a machine the user
+  does not admin, a non-starter. Chrome and Firefox exempt localhost from mixed-content;
+  **Safari and iOS do not** and demand real `wss://` even on loopback. So serve the page
+  *from the bridge* at `http://127.0.0.1:PORT`: same origin, `connect-src 'self'` intact, no
+  CSP exception, no TLS anywhere.
+- **Bind `127.0.0.1`, never `BRIDGE_HOST=0.0.0.0`.** Wide binding turns a laptop into an open
+  stratum proxy on café wifi. The origin lock is meaningless on loopback and should be kept
+  anyway — it is the guard against exactly that misconfiguration.
+- **The cert pin becomes a fleet we cannot fix.** `server.mjs` hard-fails on fingerprint
+  mismatch, which is right for a relay we operate. Combined with user-installed copies it
+  means one MoneroOcean cert rotation breaks every self-hop at once, silently — a WebSocket
+  close in a console nobody is reading, with no click-through and no update channel. Needs a
+  configurable pin, a warn-and-continue mode, or a signed remotely-updatable pin list. On
+  loopback the pin defends the user against themselves, not against an attacker.
+- **Distribution is the wall, as always.** `npx` needs Node, Docker needs Docker; a compiled
+  single binary needs nothing (Bun `--compile`, or Go). If this ships, ship the binary with a
+  checksum in `transparency/`.
+- **Progressive enhancement:** probe `ws://127.0.0.1:8787` on load, use it if it answers, fall
+  back to the hosted relay if not. That makes the local hop an *upgrade*, not a prerequisite.
+  Reliable only when the page is itself on loopback — from `web.voltminer.net` a probe to
+  localhost is the mixed-content / Private Network Access grey area.
+- **A4 interacts:** once the no-SAB replica path lands, the local server no longer needs to
+  send COOP/COEP at all, and a self-hop becomes a plain file server plus one socket.
+
+**What it buys:**
+
+- Removes us from the path: no session cap (B2), no shared egress IP and no shared-fate ban
+  (B3), no VPS to size or verify (B4), and probably lower latency than one DigitalOcean region
+  for every user on earth. A residential IP is also what a pool expects to see from a miner —
+  our relay's datacenter IP is the thing that looks like a proxy farm.
+- The strongest claim in the codebase stops being a claim. *"Login is whatever the browser
+  sent. We do not swap it."* is a comment in our source; on the user's machine it is a line
+  they can read. The local bridge is the only bridge whose honesty is verifiable.
+
+**What it does not buy — do not oversell this:**
+
+- **Not a trustlessness win against the pool.** Same MoneroOcean fee, same custody, same
+  `+10000`. Only the *transport* becomes trustless.
+- **Privacy is a trade, not a win.** Today the pool sees our IP and the relay sees the user's
+  wallet + IP. After this the pool sees the user's IP and their relay sees nothing new.
+  Different exposure, not less.
+- **No help for C1.** iOS has no Node and no terminal; this is a desktop power-user path.
+- **The audience is small by construction.** People willing to run a command largely overlap
+  with people who would rather run their own node — or already do — in which case the p2pool
+  variant (upstream = their own node, endpoint = `127.0.0.1:3333`-ish, no TLS, no pool at all)
+  is the better story, not this one.
+
+**Positioning:** *the relay exists for people who won't install anything.* Everyone else
+should be able to cut us out of the path. That is a defensible thing to say out loud.
 
 ---
 
@@ -312,3 +416,8 @@ it when touching the worker.
   untracked in `voltminer/tools/web-stratum-bridge/` (208 K). This is the same
   hand-synced-duplicate hazard as `transparency/wasm-patch` vs `third_party/`. Decide the
   canonical copy (this repo — it is deployed from here) and delete the other.
+- **A4 cites a `C3` that does not exist.** A4 says COEP *"is a live suspect in the iOS
+  standalone question (C3)"*, but section C contains only C1 and C2. Either C3 was dropped in
+  the split or it was never written. Re-point that reference at C1 (which owns the WebKit
+  question) or restore the item — as written it sends a reader looking for something that
+  isn't there.
