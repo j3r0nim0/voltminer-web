@@ -152,10 +152,39 @@ desktop/Android the ST variant buys nothing — the 2.6-3.4x is in the shared-me
 Where ST+JIT does pay is exactly where we cannot use shared memory at all: it lifts that
 configuration 3.5x, which is the iOS-shaped case.
 
-Open question this raises: whether the no-SAB path should use their full-dataset *replica*
-mode instead (their README: 1F+3 = 293 H/s, ~2.3 GB per replica, weighting a replica at
-2.25x) — that would close most of the gap to the pthread build without SAB at a large RAM
-cost. `bench/fb_full_check.mjs` exists for it, unmeasured here.
+**Replica mode measured 2026-10-06 — it is not a fallback, it is a first-class path.**
+`bench/nosab_bench.mjs` runs N worker_threads on `randomx_st` with `--full K` making K of
+them full-dataset replicas. Apple M3, 10s windows after warm-up:
+
+```
+no-SAB, 4 workers, 0 replicas (4 light)     129.4 H/s   (32.4/worker)
+no-SAB, 4 workers, 2 full + 2 light         220.2 H/s   (55.1/worker)
+no-SAB, 8 workers, 2 full + 6 light         262.5 H/s   (32.8/worker)
+
+per worker: full replica 82.9 H/s vs light 26.9 H/s -> 3.08x
+cost: ~2.3 GB per replica; cooperative dataset build 14.9 s (4 workers) / 10.8 s (8),
+      once per seed -- and Monero's seed changes about every two days
+```
+
+Three consequences, in order of importance:
+
+1. **220 H/s at 4 workers is 2x what we ship today (~110) — with no SharedArrayBuffer at
+   all.** That is the architectural headline: our fast path currently *requires* COOP/COEP
+   and `crossOriginIsolated`; this beats it without either. It also closes ~78% of the gap
+   to the pthread+JIT build (284).
+2. **Their 2.25x replica weighting is conservative** — measured 3.08x.
+3. **More cores is not faster.** 4 -> 8 workers gained only 19% (220 -> 262) and per-worker
+   fell 40%, because an M3 is 4 performance + 4 efficiency cores and the replicas also
+   contend for memory bandwidth. Their `optimizeArm` ("count half the cores") is right, and
+   we should apply the same rule to `defaultThreadCount()`, which currently returns
+   `hardwareThreads() >= 4 ? 2 : 1` — far below what this machine can use.
+
+**Open design consequence, not yet solved:** our OPFS dataset cache stores *one* ~2 GB
+dataset keyed by seed hash. Replica mode implies one dataset per replica, and their
+cooperative build rebuilds rather than restoring. Whether N replicas can restore from a
+single cached file without copying 2.3 GB into each worker's heap is unresolved and matters
+for startup time. Also: iOS is the platform we pinned to 1 thread precisely because it will
+not hold the 2 GB dataset, so replicas are probably desktop/Android-only.
 
 **Next step:** a true paired measurement — our build in their harness, or both in the
 browser — then lift the 4,900-line core and merge the four-call-site seam into our
