@@ -62,6 +62,94 @@ function bytesToHex(bytes) {
   return s;
 }
 
+/* ---- WASM JIT bring-up ----------------------------------------------------
+   The RandomX-bonanza port keeps the interpreter unless JS asks for the JIT:
+   the C side starts with g_jitEnabled = 0 and only rxSetJitEnabled(1) flips it.
+   With it off every hash runs the portable interpreter (~18 H/s/thread on an
+   M3); with the bundle below, ~68. The flags are global to the module and only
+   need setting once, before the first hash.
+
+   The bundle is aa022's own default (public/worker.js): a *resident* threaded
+   interpreter instead of one WebAssembly.Module compiled per program (that
+   per-program compile is what makes rxSetJitEnabled(1) alone only ~14%
+   faster), plus V3 regs-in-memory, V2-minimal split dispatch, INLINE_FPRC_ZERO
+   and the arm/x86 module-gen profile. supjit is the SuperscalarHash kernel used
+   by dataset init. */
+function detectJitFeature() {
+  function probe(opcodeBytes, arity) {
+    const typeEntry = [0x60, arity, ...Array(arity).fill(0x7b), 0x01, 0x7b];
+    const typeSection = [0x01, typeEntry.length + 1, 0x01, ...typeEntry];
+    const funcSection = [0x03, 0x02, 0x01, 0x00];
+    const body = [0x00];
+    for (let i = 0; i < arity; i++) body.push(0x20, i);
+    body.push(...opcodeBytes); body.push(0x0b);
+    const codeBody = [body.length, ...body];
+    const codeSection = [0x0a, codeBody.length + 1, 0x01, ...codeBody];
+    const bytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+      ...typeSection, ...funcSection, ...codeSection]);
+    try { return WebAssembly.validate(bytes); } catch { return false; }
+  }
+  const hasRelaxedSimd = probe([0xfd, 0x80, 0x02], 2); // i8x16.relaxed_swizzle
+  const hasFma = probe([0xfd, 0x87, 0x02], 3);         // f64x2.relaxed_madd
+  if (hasRelaxedSimd && hasFma) return 3;
+  if (hasRelaxedSimd) return 1;
+  return 0;
+}
+
+function isX86() {
+  const typeSection = [0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f];
+  const funcSection = [0x03, 0x02, 0x01, 0x00];
+  const exportSection = [0x07, 0x05, 0x01, 0x01, 0x66, 0x00, 0x00];
+  const data = Array.from({ length: 16 }, (_, i) => 10 + i);
+  const body = [0x00, 0xfd, 0x0c, ...data, 0xfd, 0x0c, ...Array(16).fill(0x11),
+    0xfd, 0x80, 0x02, 0xfd, 0x16, 0x00, 0x0b];
+  const codeSection = [0x0a, body.length + 2, 0x01, body.length, ...body];
+  const bytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    ...typeSection, ...funcSection, ...exportSection, ...codeSection]);
+  try { return new WebAssembly.Instance(new WebAssembly.Module(bytes)).exports.f() === 11; }
+  catch { return false; }
+}
+
+function enableRandomXJit(module) {
+  if (typeof module._rxSetJitEnabled !== 'function') return '';
+  let feature = detectJitFeature();
+  if (module._rxjit_set_feature) module._rxjit_set_feature(feature);
+  // Tell the C side how many 64 KiB pages the generated module may declare.
+  let maxPages = 65536;
+  try {
+    const t = module.wasmMemory && module.wasmMemory.type;
+    if (typeof t === 'function') {
+      const desc = t.call(module.wasmMemory);
+      if (desc && desc.maximum) maxPages = desc.maximum;
+    }
+  } catch { /* keep default */ }
+  if (module._rxjit_set_max_memory_pages) module._rxjit_set_max_memory_pages(maxPages);
+  if (module._rxjit_set_use_threaded_interp) module._rxjit_set_use_threaded_interp(1);
+  feature |= 4; // INLINE_FPRC_ZERO
+  if (module._rxjit_set_feature) module._rxjit_set_feature(feature);
+  if (module._rxjit_set_regs_in_memory) module._rxjit_set_regs_in_memory(1);
+  if (module._rxjit_set_split_inner_dispatch) module._rxjit_set_split_inner_dispatch(1);
+  if (module._rxjit_set_profile) {
+    const ua = String((self.navigator && self.navigator.userAgent) || '');
+    const jsc = /AppleWebKit\//.test(ua) && !/Chrom(e|ium)\//.test(ua);
+    module._rxjit_set_profile(!jsc && isX86() ? 1 : 0); // 0 = arm, 1 = x86
+    // -1 keeps the profile's own value for each knob.
+    for (const k of ['_rxjit_set_fuse_n', '_rxjit_set_triples_n', '_rxjit_set_unroll2',
+      '_rxjit_set_shared_code', '_rxjit_set_aes_simd', '_rxjit_set_aes_relaxed',
+      '_rxjit_set_light_mlp', '_rxjit_set_kernel_k']) {
+      if (module[k]) module[k](-1);
+    }
+  }
+  if (module._rxjit_set_supjit_enabled) module._rxjit_set_supjit_enabled(1);
+  module._rxSetJitEnabled(1);
+  const eff = typeof module._rxjit_effective_fuse_n !== 'function'
+    ? ''
+    : ` fuse_n=${module._rxjit_effective_fuse_n()} triples_n=${module._rxjit_effective_triples_n?.()}` +
+      ` unroll2=${module._rxjit_effective_unroll2?.()}` +
+      (module._rxjit_effective_aes_simd ? ` aes_simd=${module._rxjit_effective_aes_simd()}` : '');
+  return `JIT on (feature=${feature})${eff}`;
+}
+
 function seedHex() {
   return bytesToHex(seedBytes);
 }
@@ -106,13 +194,14 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=59', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=60', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
       if (typeof module._randomx_mine !== 'function') {
         throw new Error('_randomx_mine not exported');
       }
+      const jitInfo = enableRandomXJit(module);
       rx = {
         module,
         mineFn: module._randomx_mine,
@@ -137,9 +226,10 @@ function loadWasm() {
       if (typeof rx.setThreads === 'function') rx.setThreads(cpuThreads);
       postMessage({
         type: 'status',
-        message: USE_MT
+        message: (USE_MT
           ? `RandomX pthread Wasm loaded (${cpuThreads} C++ threads, one 2 GB dataset).`
-          : 'RandomX sequential Wasm loaded (this origin cannot share the dataset).',
+          : 'RandomX sequential Wasm loaded (this origin cannot share the dataset).')
+          + (jitInfo ? ` ${jitInfo}.` : ' JIT unavailable — running the interpreter.'),
       });
       return true;
     } catch (err) {
