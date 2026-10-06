@@ -1,0 +1,40 @@
+Provenance and attribution for the vendored source in this directory.
+
+WHAT THIS IS
+  A vendored copy of the RandomX engine plus a WebAssembly JIT backend, taken
+  from https://github.com/aa022/RandomX-bonanza (commit f9848e3, 2026-10-02).
+  It is the port base for the browser miner's hash-rate work: upstream RandomX
+  gates RANDOMX_HAVE_COMPILER to x86-64/aarch64/riscv64, so wasm32 lands on
+  JitCompilerFallback and our current build runs the interpreter only. This tree
+  adds a wasm backend that emits WebAssembly at runtime and lets the browser's
+  own JIT compile it.
+
+WHY WE VENDOR RATHER THAN PATCH
+  Our previous tree was WebRandomX (a different fork) plus patches, including a
+  thread-local fix for softfloat's process-global FP rounding mode. This tree
+  does not use softfloat at all -- rx_vec_f128 is __m128d, i.e. wasm SIMD
+  doubles -- so that hazard does not exist here and the patch is not needed.
+  Taking this tree as the base and re-applying our small API shim is far less
+  work, and far less risk, than porting ~1,360 changed lines across 14 core
+  files into our old tree.
+
+LICENCES, CHECKED FILE BY FILE 2026-10-06
+  * The JIT and integration (wasm_jit_*.{c,h,cpp}, wasm_jit_fuse_table.h,
+    rx_aes_relaxed_blob*.h, and the edits to the RandomX core): CC0 1.0,
+    dedicated by aa022. No obligations. See LICENSE-upstream-cc0.
+  * The RandomX engine itself (the tree this is built on, including our
+    modifications): BSD-3-Clause, tevador + The Monero Project.
+    See LICENSE-randomx-bsd3, and notices.html on the published site.
+  * src/jit_stubs/semifloat.c and src/jit_stubs/mulh.c are NOT aa022's work.
+    They are byte-identical to https://github.com/l1mey112/randomx.js
+    (sha256 352257ea6263c782, 5c5bbf80ed60f7f6), which is BSD-3-Clause:
+    tevador <tevador@gmail.com> and l-m <l-m@l-m.dev>. The notice above must be
+    retained for these two files, and l-m credited. This is the one attribution
+    obligation in the tree that the CC0 does not cover.
+
+  How that was established, for anyone re-checking: a filename-level similarity
+  between the two repositories is shared vocabulary (both have a wasm_jit.*),
+  not shared code. Diffing the JIT proper against l1mey112's showed zero shared
+  comment lines across 12,000+ lines and identifier Jaccard 0.05-0.39, while the
+  two stub files are byte-identical -- and are exactly the two files aa022
+  credits them for.
