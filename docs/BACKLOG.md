@@ -44,8 +44,30 @@ Their numbers vs ours (not same-machine, but the per-thread ratio is not close):
 
 We are *smaller* because we left the JIT out. Their extra ~220 KB buys 3–6×.
 
-**Licence: CC0** (public-domain dedication) — the code is adoptable. Caveat: check per-file
-provenance, the semifloat stubs come from l1mey112's `randomx.js` with their own terms.
+**Licence: CC0, and provenance is now checked (2026-10-06)** — adoptable, no obligations
+on their code. Verified by diffing against `l1mey112/randomx.js`, which is *itself* a wasm
+RandomX JIT and shares the `wasm_jit_*` / `jit_vm_*` / `jit_ssh` / `stubs` naming, so
+derivation was a real possibility:
+
+- `jit_stubs/semifloat.c` and `jit_stubs/mulh.c` are **byte-identical** to l1mey112's
+  (`sha256 352257ea…`, `5c5bbf80…`). Those are exactly the two files aa022 credits them for,
+  so the credit is accurate rather than understated.
+- The JIT proper (`wasm_jit_gen.c`, `_inst.c`, `_decode.c`, `_run.cpp`, `_superscalar.cpp`,
+  `_threaded.c`, `_compiler.cpp` — 12,000+ lines) shares **zero comment lines** with
+  l1mey112 and has identifier Jaccard 0.05–0.39, with the highest matches on `_leb128` /
+  `_macros` (shared wasm-opcode vocabulary, not sharing). Their files are also consistently
+  larger. Independent implementation, l1mey112 as design reference.
+- Supporting detail: l1mey112 encodes JIT capability as an enum (0/1/2), aa022 as a bitmask
+  (`feature=7`). Same idea, different design.
+
+**What that means for attribution:** the JIT is CC0 — nothing owed. The two copied stubs and
+the vendored `wasm/src/` RandomX tree are **BSD-3-Clause** (`tevador` + The Monero Project,
+and `l-m <l-m@l-m.dev>` for the stubs), so the notice must be retained for those, which
+`notices.html` already does for RandomX and needs one line added for l-m.
+
+Corrected earlier claim: I first flagged the CC0 as likely overreaching on the JIT files.
+That was wrong — it was based on filename similarity, which is shared vocabulary, not
+shared code.
 
 ### A2. Measured 2026-10-06 — DONE. It is real, it is correct, and it's worth ~3–5×.
 
