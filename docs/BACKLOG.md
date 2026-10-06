@@ -751,3 +751,38 @@ Two things the rebuild surfaced:
 
 `?v=` 60 → 61, `transparency/SHA256SUMS` regenerated, `transparency/wasm-patch`
 resynced. Don't redo the JIT port (`c59e611`).
+
+## Hashrate panel read ~25% high — fixed (2026-10-06)
+
+The 10 s window in `js/miner-client.js` summed `n` over samples 2 s apart but
+divided by `(now - oldest.t)`, dropping the oldest sample's own interval: five
+samples cover 10 s of hashes but measured 8 s of clock, so every rate read 1.25x
+high. On the first tick there is one sample, the span clamped to 1 s while
+covering a full 2 s, so it read 2x. The user's own log showed 500 H/s where the
+totals say 400. Fixed by carrying each sample's span and dividing by the sum;
+verified exact by simulation (constant and jittery ticks) and in vivo (below).
+
+## Thread sweep, M3 MacBook Air (fanless, 4P + 4E), 2026-10-06
+
+Real pool, Fast mode, diff 10000, mining to a burn address. True rate measured
+from the worker's own `nonceBase`, not the panel. Two full passes, 120 s each:
+
+| threads | TRUE H/s | panel | panel/true |
+|---|---|---|---|
+| 2 | 229.2 | 221.9 | 0.97 |
+| 3 | 267.5 | 288.0 | 1.08 |
+| 4 | 263.2 | 272.4 | 1.03 |
+| 2 | 169.2 | 167.1 | 0.99 |
+| 3 | 223.1 | 237.3 | 1.06 |
+| 4 | 278.3 | 343.2 | 1.23 |
+
+- The panel now tracks truth to within ~10% instead of a systematic 1.25x.
+- 2 threads is clearly the worst (~170-230). 3 and 4 are within noise of each
+  other (~220-280) — no repeatable winner.
+- The same setting varies ~30% between passes (2 threads: 229 then 169). On a
+  fanless Air under sustained all-core load, thermals and ambient contention
+  dominate the 3-vs-4 difference, so there is no setting worth tuning to.
+- This reproduces the real-pool run: its ~500 H/s panel figure is ~400 true at
+  the cold start, settling to ~245 true — matching 263-278 here.
+- Committed wasm heap in Fast mode after the fill: **2445 MiB** (vs the old fixed
+  3584 MiB floor; light mode stays 16 MiB). Dataset fill took ~89 s here.

@@ -245,17 +245,22 @@ export class MinerClient {
       const now = Date.now();
       const n = this.windowHashes;
       this.windowHashes = 0;
-      if (n) this.hashSamples.push({ t: now, n });
+      const dt = Math.max(0.001, (now - this.statsAt) / 1000);
+      this.statsAt = now;
+      // A sample's n was accumulated over dt — the interval since the previous
+      // tick — so the window's real span is the sum of those intervals. Dividing
+      // the sum of n by (now - oldest.t) instead drops the oldest sample's own
+      // interval and read ~25% high (5 samples 2 s apart cover 10 s of hashes but
+      // measure 8 s of clock); on the first tick it clamped that span to 1 s while
+      // covering a full 2 s, i.e. 2x. Both made the number uncomparable with any
+      // other miner.
+      if (n) this.hashSamples.push({ t: now, n, dt });
       const cutoff = now - 10000;
       while (this.hashSamples.length && this.hashSamples[0].t < cutoff) this.hashSamples.shift();
       let total = 0;
-      for (const s of this.hashSamples) total += s.n;
-      const dt10 = this.hashSamples.length
-        ? Math.max(1, (now - this.hashSamples[0].t) / 1000)
-        : 10;
-      this.hashrate = total / dt10;
-      const dt = Math.max(0.001, (now - this.statsAt) / 1000);
-      this.statsAt = now;
+      let span = 0;
+      for (const s of this.hashSamples) { total += s.n; span += s.dt; }
+      this.hashrate = span ? total / span : 0;
       this.#emit('stats', {});
       if (this.wantRun && n > 0) {
         this.#emit('tick', {
@@ -264,7 +269,7 @@ export class MinerClient {
           total: this.totalHashes,
           jobId: this.job?.job_id || '',
           dt,
-          window: dt10,
+          window: span,
         });
       }
     }, 2000);
@@ -552,7 +557,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=61', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=62', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
