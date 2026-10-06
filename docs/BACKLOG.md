@@ -186,6 +186,23 @@ single cached file without copying 2.3 GB into each worker's heap is unresolved 
 for startup time. Also: iOS is the platform we pinned to 1 thread precisely because it will
 not hold the 2 GB dataset, so replicas are probably desktop/Android-only.
 
+**Decision 2026-10-06: no embed, ever.** Not because their implementation is poor — it
+takes the embedder's own wallet, gates on a real user gesture, and is pinned to an immutable
+commit with SRI — but because the pattern is abuse-prone by construction: the consent UI
+belongs to a third party we cannot audit, and the economics push every embedder toward
+minimising the friction of saying yes. It also contradicts what our own page promises
+("your device, your wallet"), which only works when we own the page.
+
+**Consequence, and it is a simplification:** the embed was the *only* driver for the no-SAB
+path, since a third-party page cannot set COOP/COEP on itself and so can never have
+`SharedArrayBuffer`. With no embed there is no reason to pursue replica mode. The port
+therefore targets **one variant — pthread + SAB + JIT** — which is also the RAM-light one
+(284 H/s on a single ~2.3 GB dataset, versus replicas at 220 H/s on two or more). Light mode
+remains the soft, low-RAM default and the iOS fallback.
+
+That also closes the open OPFS question above: one dataset keyed by seed hash is exactly
+right when there is one shared dataset, which is now the only configuration we ship.
+
 **Next step:** a true paired measurement — our build in their harness, or both in the
 browser — then lift the 4,900-line core and merge the four-call-site seam into our
 already-patched `vm_interpreted.cpp`.
