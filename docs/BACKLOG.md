@@ -719,3 +719,35 @@ misbehaves, the fallback is a smaller fixed heap sized for light mode.
 `c59e611` ported bonanza's JIT bring-up into `js/miner-worker.js` (`enableRandomXJit`). The miner
 had been running the portable interpreter because nothing called `rxSetJitEnabled(1)`; that is
 why the browser sat at ~128 H/s. Now ~2.6–14× faster (measured ~437 H/s at 4 threads).
+
+## The memory crash — fixed (2026-10-06)
+
+Rebuilt the mt wasm growable and shipped it. `build-web-randomx-mt.sh` had forced
+`FIXED_MEMORY=1 INITIAL_MEMORY=MAXIMUM_MEMORY=3584 MiB`.
+
+The artifact itself says it, before any browser is opened:
+- old wasm import: `a.a mem min=57344 max=57344 shared=true` — 3584 MiB committed on load
+- new wasm import: `a.a mem min=256 max=65536 shared=true` — 16 MiB committed, grows to 4 GiB
+- glue: `INITIAL_MEMORY || 3758096384` with `maximum: INITIAL_MEMORY/65536`
+  → `INITIAL_MEMORY || 16777216` with `maximum: 65536`
+
+Verified through the shipped worker (headless Chrome, dev server, local relay):
+- committed wasm heap at load: **16 MiB** (was 3584 MiB), shared
+- `diag.html`: canonical vector MATCH on both builds, no page errors
+- worker log still `JIT on (feature=7) fuse_n=200 …`; `static_init_attempts=1`, `fails=0`
+- canonical hash identical JIT-off vs JIT-on: 78 ms vs 17 ms (~4.5×)
+- 90 s light session, 2 threads: ~59 H/s, accepted climbing, rejected=0, no crash
+- the caveat is resolved: `memory.grow` on the shared memory works here. Growing
+  from 16 MiB to 2404 MiB by allocating 2 GiB kept the canonical hash identical at
+  peak and after, and `vm.swapusage` did not move. (Memory does not shrink again,
+  as expected; light mode never grows it, so it stays 16 MiB.)
+
+Two things the rebuild surfaced:
+- the committed docker invocation ran `sh ./build.sh`; the image's `/bin/sh` is dash
+  and `build.sh` uses bash arrays, so it could never have built as written. Now `bash`.
+- `wasmMemory` is not exported in the mt build, so `enableRandomXJit` falls back to
+  `maxPages=65536`. That used to over-state the fixed heap's real max (57344 pages);
+  with growable memory it now matches exactly.
+
+`?v=` 60 → 61, `transparency/SHA256SUMS` regenerated, `transparency/wasm-patch`
+resynced. Don't redo the JIT port (`c59e611`).

@@ -10,9 +10,9 @@ Emscripten-build the shared-memory `web-randomx-mt`.
 |---|---|
 | `wasm/src/src/web_randomx.cpp` | our API shim: LE nonce at blob[39], `_randomx_mine`, the `randomx_dataset_*` chunked API, pthread VMs |
 | `wasm/src/src/web_randomx.h` | 16 lines defining `EM_PORT_API` (reused from WebRandomX; not in the bonanza tree) |
-| `wasm/build.sh` | bonanza's script with three edits: our shim added to `SOURCES`, our 12 `_randomx_*` export names added to `EXPORTED_FUNCTIONS`, and the pthread link retargeted to `web-randomx-mt.js`. Our flags: `-s EXPORT_NAME=createWebRandomX`, `-s ENVIRONMENT=worker`, fixed 3584 MB memory, `PTHREAD_POOL_SIZE=8`, `EXPORTED_RUNTIME_METHODS=HEAPU8`. |
+| `wasm/build.sh` | bonanza's script with three edits: our shim added to `SOURCES`, our 12 `_randomx_*` export names added to `EXPORTED_FUNCTIONS`, and the pthread link retargeted to `web-randomx-mt.js`. Our flags: `-s EXPORT_NAME=createWebRandomX`, `-s ENVIRONMENT=worker`, `PTHREAD_POOL_SIZE=8`, `EXPORTED_RUNTIME_METHODS=HEAPU8`. |
 | `against-upstream-f9848e3.patch` | the same change as `git diff` vs that commit |
-| `build-web-randomx-mt.sh` | docker build that reproduces the shipped binary |
+| `build-web-randomx-mt.sh` | docker build that reproduces the shipped binary. Leaves memory **growable** (bonanza's default: `ALLOW_MEMORY_GROWTH=1`, `MAXIMUM_MEMORY=4 GiB`), so the mt build commits ~16 MiB at load and grows to the JIT's 4 GiB ceiling only if a full-dataset run needs it. An earlier revision forced `FIXED_MEMORY=1` at 3584 MiB, which committed that heap on load in every mode — including light — and swapped a 16 GB machine to death. |
 
 Shipped artifact: `js/vendor/randomx/web-randomx-mt.wasm` (and `.js`).
 

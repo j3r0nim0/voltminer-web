@@ -3,7 +3,7 @@
    mine and sends nothing anywhere. Classic script: no module, eval or Function. */
 (() => {
   'use strict';
-  const VERSION = 'diag v60';
+  const VERSION = 'diag v61';
   const WASM_DIR = 'js/vendor/randomx/';
   const EXPECTED = '30aed56ecfba3f935eb906a633c3c412bb5361175bb3dda93070f08615c45c6f';
   // Minimal wasm () -> i32 whose body uses v128; node v22 WebAssembly.validate === true.
@@ -162,7 +162,7 @@
     window.createWebRandomX = undefined;
     if (typeof factory !== 'function') throw new Error('the glue did not export a factory');
     const module = await factory({
-      locateFile: (p) => new URL(WASM_DIR + p.split('/').pop() + '?v=60', base).href,
+      locateFile: (p) => new URL(WASM_DIR + p.split('/').pop() + '?v=61', base).href,
       mainScriptUrlOrBlob: url,
     });
     if (!module || typeof module._randomx_hash !== 'function') throw new Error('_randomx_hash was not exported');
@@ -212,8 +212,8 @@
     running = true;
     runBtn.disabled = true;
     hashStatus.textContent = 'hashing…';
-    const singleUrl = new URL(WASM_DIR + 'web-randomx.js?v=60', base).href;
-    const mtUrl = new URL(WASM_DIR + 'web-randomx-mt.js?v=60', base).href;
+    const singleUrl = new URL(WASM_DIR + 'web-randomx.js?v=61', base).href;
+    const mtUrl = new URL(WASM_DIR + 'web-randomx-mt.js?v=61', base).href;
     body['wasm reference vector'] = []; body['threads build'] = []; body['verdict'] = [];
     push('wasm reference vector', 'seed: 32 bytes of 0x00');
     push('wasm reference vector', 'blob: 76 bytes of 0x00, nonce 01000000 at byte 39');
