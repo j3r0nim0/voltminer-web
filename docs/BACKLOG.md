@@ -652,3 +652,70 @@ Do not claim a speedup until this is resolved with a clean measurement.
 
 **Still open:** the performance measurement (task 2 above), and a post-change soak (the soak
 harness does not tick the new opt-in box, so a naive re-run now mines in light mode).
+
+---
+
+## HANDOFF — the memory crash (fixed 3.5 GB WASM heap)
+
+**State:** branch `jit`, HEAD `c59e611`, working tree clean. The WASM JIT is ported and
+working. The one thing left is a **memory defect that kills the whole browser**.
+
+### The bug
+`third_party/RandomX-JIT-overlay/build-web-randomx-mt.sh` builds the mt wasm with fixed memory:
+
+```
+FIXED_MEMORY=1 INITIAL_MEMORY=3758096384 MAXIMUM_MEMORY=3758096384
+```
+
+so the worker **commits a 3.5 GB WASM heap on load, in every mode**. Add the 2.3 GB dataset
+inside it, 4 pthreads and the JIT modules, and a 4-thread full-dataset run on a 16 GB M3 Air
+pushes the box into heavy swap — the OS kills the browser. Symptom: *"the entire chrome just
+disappeared"* after 4–5 min at ~300 H/s. This is a real defect for a page whose default is now
+light mode, which shouldn't need more than a few hundred MB.
+
+### Evidence
+- No `.ips` crash report (a SIGKILL leaves none; a tab crash would write one).
+- `vm.swapusage` right after: `total 8192M  used 7017M` — severe pressure.
+- **Not the JIT.** 2-thread full-mode ran 5.5 min stable (~225 H/s); 4-thread ran 90 s stable
+  (~437 H/s); both `fails=0`, and `rxjit_stat_static_init_attempts` == thread count (one module
+  compile per pthread, no churn). Client state is bounded; reconnects do **not** re-create
+  workers (`stop()` only pauses; `#spawnWorkers` runs only from `start`).
+
+### The fix
+Rebuild the mt wasm with growable memory (bonanza's own default) instead of fixed:
+
+1. In `build-web-randomx-mt.sh`, stop forcing `FIXED_MEMORY=1`; the build.sh default is
+   `-s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4294967296`.
+2. `./build-web-randomx-mt.sh` (docker `emscripten/emsdk:4.0.10`; clang-19 is absent there so the
+   committed relaxed-SIMD AES blob is kept — expected, matches the shipped binary today).
+3. Copy `wasm/web-randomx-mt.{js,wasm}` → `js/vendor/randomx/`.
+4. Verify (below), then bump `?v=` (currently `60`), run `tools/gen-sha256sums.sh`, commit.
+
+**Verify before committing:**
+- `diag.html` canonical vector still MATCHes.
+- The hash log still says `JIT on (feature=7) …` (the JIT must stay engaged).
+- Hash is identical JIT-off vs JIT-on — I used a worker probe that extracts `enableRandomXJit`
+  from `js/miner-worker.js`, builds a dataset in a tight loop, and compares both hashes.
+- Confirm a light-mode session no longer commits 3.5 GB (watch the tab in Activity Monitor).
+
+**Caveat:** fixed memory was chosen deliberately; growable + `SHARED_MEMORY=1` (pthreads) is what
+bonanza ships by default, but confirm it works here. If `memory.grow` on a shared memory
+misbehaves, the fallback is a smaller fixed heap sized for light mode.
+
+### Environment gotchas
+- `node` is a hermit shim — use `~/.nvm/versions/node/v22.22.2/bin/node` for puppeteer scripts;
+  `puppeteer-core` lives in `/tmp/voltminer-chrome-test/node_modules`.
+- Dev server: `node tools/dev-server.mjs` → <http://127.0.0.1:8099> (COOP/COEP → crossOriginIsolated).
+- The page defaults to a **local** relay on localhost (`ws://127.0.0.1:8787`), which nothing
+  listens on. A local test stack *is* running: fake TLS pool `:20099` + bridge `ws://127.0.0.1:8799`
+  → <http://127.0.0.1:8099/?relay=ws://127.0.0.1:8799>. Its target is trivial so **every hash is a
+  submit** — don't read H/s from it. Real pool: `?relay=wss://bridge.voltminer.net`.
+- **≤ 2 threads for soaks.** Never kill the user's real browser — only `--headless` processes.
+- `tools/deploy.sh` step 2 mirrors `third_party/RandomX-JIT-overlay` ↔ `transparency/wasm-patch`
+  (and `third_party/WebRandomX-overlay` ↔ `transparency/wasm-patch-webrandomx`); keep them
+  rsynced. Its step 1 requires every `?v=` and `const VERSION` to agree.
+
+### Also done this session — don't redo
+`c59e611` ported bonanza's JIT bring-up into `js/miner-worker.js` (`enableRandomXJit`). The miner
+had been running the portable interpreter because nothing called `rxSetJitEnabled(1)`; that is
+why the browser sat at ~128 H/s. Now ~2.6–14× faster (measured ~437 H/s at 4 threads).
