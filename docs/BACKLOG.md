@@ -287,6 +287,27 @@ and OPFS inside a real worker), then the 20-minute live soak with `accepted > 0 
 rejected === 0`. Everything verified so far has been in node; nothing has run in a browser
 yet, and the soak is the only test that covers the full stack.
 
+*** In a browser, locally, 2026-10-06: the ported engine passes diag.html ***
+Built with our flags from their build script (`-ffast-math` gone, `-flto` inherited, our
+exports/module name/memory layout) and staged at `js/vendor/randomx/web-randomx-mt.{js,wasm}`
+-- 265 KB + 49 KB, up from 102 KB + 26 KB.
+
+```
+single-thread wasm: ran, MATCH        (unchanged old build)
+pthreads wasm:      ran, MATCH        (ported engine, our shim)
+cross-origin isolated: true
+verdict: this device can mine.
+```
+
+One build-plumbing bug worth remembering: emscripten bakes the wasm *filename* into the glue
+at link time. Renaming `randomx.wasm` to `web-randomx-mt.wasm` after the build gives a silent
+404 on the wasm fetch and "Aborted(both async and sync fetching of the wasm failed)" -- the
+fix belongs in the build (`-o "$OUTDIR/web-randomx-mt.js"`), not in a post-hoc rename.
+
+**Still remaining:** the live soak (`accepted > 0 && rejected === 0`) against the real pool,
+then the transparency artifacts and `notices.html`. The soak is the only test that covers
+mining end to end on the ported engine.
+
 ## B. Delivery and hosting
 
 ### B1. The wasm ships uncompressed
