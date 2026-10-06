@@ -1,6 +1,7 @@
 /* RandomX hash worker (experimental).
 
-   JIT is not available in Wasm (CompiledVm::execute is empty).
+   The pthread build carries a WebAssembly JIT (enableRandomXJit, below); the
+   single-thread build exposes no JIT and runs the portable interpreter.
    Light/cache hashes immediately. Then we allocate the ~2 GB dataset and
    either restore it from OPFS (keyed by seed_hash) or fill it in C++
    chunks. A seed change drops the old file and rebuilds. */
@@ -194,7 +195,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=62', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=63', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });

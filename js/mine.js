@@ -7,7 +7,7 @@ import {
   hardwareThreads,
   MAX_THREADS,
   loadOrCreateWorkerId,
-} from './miner-client.js?v=62';
+} from './miner-client.js?v=63';
 
 const $ = (id) => document.getElementById(id);
 
