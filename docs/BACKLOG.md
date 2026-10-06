@@ -226,6 +226,45 @@ rather than a precondition.
 
 ---
 
+### A5. Port started 2026-10-06 (branch `jit`) — and `-ffast-math` is a wrong-hash bug
+
+**Our shim runs on their engine, unmodified.** Method: vendor their `wasm/`, add our
+`web_randomx.cpp` to `SOURCES`, add our 12 export names to `EXPORTED_FUNCTIONS`, and supply
+`web_randomx.h` — 16 lines defining `EM_PORT_API`, which lives in WebRandomX's tree and not
+in our overlay. Compiles and links with **zero source changes to the shim**, and reproduces
+our pinned vector exactly:
+
+```
+_randomx_hash(0n, 0n, seedPtr, blobPtr, 76, hashPtr)   ->  30aed56e...c45c6f   MATCH
+```
+
+That retires the port's biggest risk. We expected our API surface (`_randomx_hash`,
+`_randomx_mine`, and the `randomx_dataset_*` family the OPFS cache and progress UI drive) not
+to meet theirs. It does, so no shim rewrite.
+
+**Then the flag test, and it fails.**
+
+```
+their flags (-O3 -flto -DNDEBUG -msimd128 -pthread)   ->  30aed56e...c45c6f   MATCH
+same build + -ffast-math (what OUR CMakeLists uses)   ->  cd821fa2...afcc9e   MISMATCH
+```
+
+**0 compile errors, returns ok=1, wrong hash.** Their FP layer is real `double` SIMD with
+soft-rounding fallbacks guarded by `err == 0.0` and rounding-mode comparisons — precisely the
+constructs fast-math is permitted to delete. So:
+
+* **Adopting their engine REQUIRES dropping `-ffast-math`** in `CMakeLists.txt`, where it is
+  currently on every RandomX source.
+* The failure mode is the one this project already paid for: a miner that runs happily,
+  reports a healthy hashrate, and gets **every share rejected**. Dropping their JIT files into
+  our existing build config — the literal "patch our tree" version of this port — is what
+  would have shipped that. The canonical vector caught it in about a minute.
+* Bonus: their build uses `-flto`, ours does not, so we inherit it.
+
+Next: map `randomx_dataset_begin/step/percent/mark_ready` onto their
+`_rxInitDatasetStart/Join/Progress` + `_rxInitItemsInto` (their shape looks better for the
+OPFS chunk case), then full-dataset mining and the 20-minute soak.
+
 ## B. Delivery and hosting
 
 ### B1. The wasm ships uncompressed
