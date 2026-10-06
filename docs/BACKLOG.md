@@ -265,6 +265,28 @@ Next: map `randomx_dataset_begin/step/percent/mark_ready` onto their
 `_rxInitDatasetStart/Join/Progress` + `_rxInitItemsInto` (their shape looks better for the
 OPFS chunk case), then full-dataset mining and the 20-minute soak.
 
+**Full-dataset mode verified 2026-10-06.** The pinned vector only covers light/cache mode, and
+full mode runs different code (`rxInitDatasetStart`, the superscalar kernel, the JIT's
+full-memory program). RandomX guarantees full and light agree for the same input, so light
+mode is a self-contained reference:
+
+```
+light mode:  30aed56e...c45c6f   ok=1   84ms
+dataset:     began=1  percent=100  items=34078719  init=4132ms
+full mode:   30aed56e...c45c6f   ok=1
+MATCH
+```
+
+`items=34078719` is exactly RandomX's item count (34,078,719 x 64 B = 2.03 GiB), so the
+dataset was really built rather than silently skipped. And our own chunked API
+(`randomx_dataset_begin/step/percent/mark_ready`) drives it unchanged -- their parallel init
+slots underneath our chunking with no shim changes, and 34M items took 4.1 s.
+
+**Remaining:** the JS/browser integration (`miner-worker.js` loading the new module, pthreads
+and OPFS inside a real worker), then the 20-minute live soak with `accepted > 0 &&
+rejected === 0`. Everything verified so far has been in node; nothing has run in a browser
+yet, and the soak is the only test that covers the full stack.
+
 ## B. Delivery and hosting
 
 ### B1. The wasm ships uncompressed
