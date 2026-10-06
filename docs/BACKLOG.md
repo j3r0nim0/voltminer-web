@@ -549,3 +549,67 @@ it when touching the worker.
   the split or it was never written. Re-point that reference at C1 (which owns the WebKit
   question) or restore the item — as written it sends a reader looking for something that
   isn't there.
+
+
+---
+
+# HANDOFF — resume here (written 2026-10-06, end of session)
+
+**State:** branch `jit` (last commit `fcf9853` + the soak result below). The ported engine is
+staged at `js/vendor/randomx/web-randomx-mt.{js,wasm}` (265 KB + 49 KB) and **works end to end
+in a browser against the real pool**: 2 accepted shares, 0 rejected, full dataset. Steps 1-3
+of the port are done.
+
+**Next four tasks, in order, as requested:**
+
+1. **Kill stray headless Chrome.** A pile accumulated from this session's runs. `ps ax -o
+   comm= | grep -c Chrome` showed 10 before the last soak. Do NOT kill the user's real browser
+   — check for `Google Chrome for Testing` / `--headless` specifically and ask before anything
+   broad.
+2. **5-minute soak, 2 threads, in the background.** Verified invocation:
+   `SECONDS=300 THREADS=2 URL='http://127.0.0.1:8099/?relay=wss://bridge.voltminer.net'
+   LOG=/tmp/soak-jit3.log ~/.nvm/versions/node/v22.22.2/bin/node
+   /tmp/voltminer-chrome-test/soak.mjs`
+3. **Step 4 — transparency.** Regenerate `transparency/wasm-patch/` against upstream
+   (`against-upstream-780908a.patch` no longer describes the build) and add the l-m BSD-3
+   notice to `notices.html`. **`tools/deploy.sh` will refuse to deploy until this is done** —
+   that is the guard working, not a bug.
+4. **Step 5 — policy.** `defaultThreadCount()` returns `hardwareThreads() >= 4 ? 2 : 1`, far
+   below what the box can use; and the dataset should become an explicit opt-in (~2.5 GB)
+   rather than a default, with light mode as the soft default.
+
+## Gotchas that cost time this session — do not rediscover
+
+* **The soak harness's `BRIDGE` env var is dead code.** It sets `localStorage.bridgeWs`, but we
+  removed that override in favour of `?relay=`. Without `?relay=` in `URL`, the page falls back
+  to `ws://127.0.0.1:8787` and the soak mines nothing for its whole duration (happened once,
+  20 minutes wasted). The harness wallet is already the user's, hardcoded at `soak.mjs:9`.
+* **`node` on this shell is a hermit shim** that resolves relative script paths against its own
+  directory (`Cannot find module '/Users/jerry/.config/goose/mcp-hermit/soak.mjs'`). Always use
+  `~/.nvm/versions/node/v22.22.2/bin/node` with an absolute script path.
+* **Build recipe for the port:** their `wasm/` tree + three edits to `build.sh` (add our
+  `web_randomx.cpp` to `SOURCES`, add our 12 export names to `EXPORTED_FUNCTIONS`, rename `-o`
+  to `web-randomx-mt.js`), plus `web_randomx.h` copied from WebRandomX's tree, plus our flags.
+* **Emscripten bakes the wasm filename into the glue at link time.** Renaming the artifact
+  after the build gives a silent 404 and `Aborted(both async and sync fetching of the wasm
+  failed)`. Fix in the build (`-o`), never by renaming.
+* **`-ffast-math` must stay off.** With it the engine returns `ok=1` and a wrong hash.
+* **The soak's FINAL tally counters read 0** (`submits/accepted/rejected`) — broken since the
+  log format changed. The authoritative lines are `submit … local=ok` and `accepted  total=N`,
+  plus `ok=N` in the UI.
+
+## Unresolved and important: performance is NOT verified
+
+The last soak measured **44.8 H/s at 2 threads ≈ 22 H/s/thread**, against the old interpreter
+build's ~27 H/s/thread in the same headless setup — i.e. **the JIT showed no benefit in the
+browser**, contradicting node (110 H/s/thread, 4.7x over the interpreter). Two suspects, both
+testable:
+
+1. **Machine load** — 10 stray Chrome processes plus a loaded box. Measure on a quiet machine
+   before drawing any conclusion.
+2. **The AES path may not be engaged.** Their own bench banner reports `aes=0 aesr=0`, and
+   because `clang-19` is absent from our `emscripten/emsdk:4.0.10` image we kept their
+   committed relaxed-SIMD AES blob instead of building it. Software AES would account for a
+   large constant factor -- the same class of loss found in the Anvil Android build.
+
+Do not claim a speedup until this is resolved with a clean measurement.
