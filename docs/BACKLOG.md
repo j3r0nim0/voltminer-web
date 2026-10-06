@@ -147,6 +147,9 @@ broken", A1 is the fix: light mode is exactly where the interpreter hurts most.
 
 ### D1. Our rounding fix patched a symptom; theirs avoids the cause
 
+Full write-up: `docs/WEB-RANDOMX-MT-ROUNDING-RACE.md` (moved here from the Android
+repo on 2026-10-06 — it was untracked there, i.e. one `git clean` from being lost).
+
 We made RandomX's process-global FP-mode globals `__thread` so concurrent VMs can't clobber
 each other. Bonanza never depends on the host FP rounding mode: explicit `wasm_softround.h`
 + `jit_stubs/semifloat.{c,h}`, exports `_rxSoftroundAdd/Sub/Mul/Div/Sqrt` and
