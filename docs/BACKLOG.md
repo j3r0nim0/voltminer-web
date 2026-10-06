@@ -47,12 +47,74 @@ We are *smaller* because we left the JIT out. Their extra ~220 KB buys 3–6×.
 **Licence: CC0** (public-domain dedication) — the code is adoptable. Caveat: check per-file
 provenance, the semifloat stubs come from l1mey112's `randomx.js` with their own terms.
 
-### A2. Measure the delta before porting anything
+### A2. Measured 2026-10-06 — DONE. It is real, it is correct, and it's worth ~3–5×.
 
-Build theirs, run **our** canonical vector (`30aed56e…` for an all-zero seed/blob, nonce
-`01000000` — already pinned in `diag.js`) and a plain hash loop, and compare H/s on this
-machine, same browser, same threads. Cheap, and it decides whether A1 is a project or a
-weekend. Do this first.
+Built theirs with **our own toolchain** (`emscripten/emsdk:4.0.10`, one command,
+`ST_BUILD=0`, no patching) and ran their tests on the M3.
+
+**Correctness — the gate.** `node bench/canonical_hash.mjs` passes RandomX's official test
+vector:
+
+```
+Hash:     8a48e5f9db45ab79d9080574c4d81954fe6ac63842214aff73c244b26330b7c9
+Expected: 8a48e5f9db45ab79d9080574c4d81954fe6ac63842214aff73c244b26330b7c9
+PASS - hash matches canonical RandomX test vector.
+```
+
+This is the thing that mattered. A wasm JIT that is fast but wrong is worse than our
+interpreter — that is exactly the bug we spent this project on. It is not wrong.
+
+**Speed, paired, same harness, one flag apart (Apple M3, 8 cores, 4 threads, 12 s/pass):**
+
+| | H/s | H/s/thread |
+|---|---|---|
+| interpreter (`--nojit`) | **60** | 15 |
+| JIT (baseline) | **284** | 71 |
+
+≈**4.7×** from the JIT alone. Against our own build (~110 H/s at 4 threads in headless
+Chrome on the same machine) their JIT is ~2.6–3.4×. Note the variance: four "identical"
+baseline runs gave 284 / 338 / 376 / 381, so quote **3–5×**, not a point value.
+
+Two calibration notes. Their README claims 647 H/s at 4 threads on an M4; we reproduced 376
+on an M3 at best, so **their published table runs ~1.7× optimistic**. And their *interpreter*
+(60 H/s) is slower than our build (~110 H/s), which is worth understanding before assuming
+we'd land at exactly 4.7× — our interpreter is not their interpreter.
+
+**Port shape — much smaller than feared.**
+
+- The seam is **not** RandomX's `JitCompiler`: their `common.hpp` and
+  `jit_compiler_fallback.hpp` are stock upstream, and wasm still takes the
+  `HAVE_COMPILER 0` branch. They hook the **interpreter** instead — four call sites in
+  `vm_interpreted.cpp` (`rxjit_run_program_full` / `_light`). We *already* patch that file.
+- The call mechanism is **`EM_JS`**: C hands the generated wasm bytes to a JS trampoline
+  (`rxjit_js_run`), which does `new WebAssembly.Instance(new WebAssembly.Module(bytes))`
+  against the existing shared memory and calls the program — **once per hash**, not per
+  instruction, so the JS boundary is free. Their comment notes EM_JS is used deliberately
+  *"so it's available in every pthread"*. `rx_aes_relaxed_hf` is the same pattern for their
+  raw-wasm AES side module, so it is a proven template twice over.
+- **Size:** JIT core ≈ **4,900 LOC** (`wasm_jit_run.cpp` 1,301, `wasm_jit_compiler.cpp`
+  1,007, `wasm_jit_decode.c` 676, `wasm_jit_gen.c` 631, `wasm_jit_inst.c` 601,
+  `wasm_jit_superscalar.cpp` 655, `wasm_jit_leb128.c` 37). The ~6,800 lines of threaded
+  interpreter + `wasm_jit_fuse_table.h` are **optional**: supjit measured ~4%, i.e. inside
+  the noise.
+- **CSP: no change needed.** `new WebAssembly.Module(bytes)` is compiling wasm from bytes,
+  which `script-src 'self' 'wasm-unsafe-eval'` already permits. That was added for the
+  Emscripten glue.
+- **Payload cost:** their wasm built to **256 KB** vs our 102 KB (mt) — so ~+154 KB, which
+  B1's missing gzip would more than absorb.
+- **Licence:** CC0. Verify per-file provenance (the semifloat stubs come from l1mey112's
+  `randomx.js`).
+
+**A trap to inherit carefully.** From their own bench driver: *"Sharing a single Module
+across multiple rxCreateMiningContext / rxInitDatasetStart cycles leaks Emscripten
+pthread-pool state — the final pass at 32 threads ends up at ~230 H/s instead of the ~540
+H/s a cold-start run delivers."* Our client re-creates workers on thread change and
+reconnect, which happens to sidestep this — but it means we must **not** "optimise" by
+reusing one Module across mining contexts once the JIT is in.
+
+**Next step:** a true paired measurement — our build in their harness, or both in the
+browser — then lift the 4,900-line core and merge the four-call-site seam into our
+already-patched `vm_interpreted.cpp`.
 
 ### A3. Thread counting on ARM: count performance cores, not cores
 
