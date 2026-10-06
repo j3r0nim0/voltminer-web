@@ -20,7 +20,7 @@ else's address on the MoneroOcean dashboard.
 ## Audit it in five minutes
 
 1. **Read what runs.** Every file is served unminified: view-source, or e.g.
-   `curl https://web.voltminer.net/js/miner.js`. The page is `index.html`; the
+   `curl https://web.voltminer.net/js/miner-worker.js`. The page is `index.html`; the
    logic is `js/mine.js` (UI), `js/miner-client.js` (stratum + lifecycle),
    `js/miner-worker.js` (hashing), `js/pwa.js` (install + update) and `sw.js`
    (the offline cache). `diag.html` prints what a device supports.

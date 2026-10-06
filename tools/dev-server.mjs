@@ -38,7 +38,10 @@ const MIME = {
 http
   .createServer((req, res) => {
     const rel = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    const file = path.join(ROOT, rel === '/' ? 'index.html' : rel);
+    // Directory requests get their index.html, the way Caddy's file_server does
+    // in production — without this, /transparency/ (linked from the footer)
+    // 404s locally only.
+    const file = path.join(ROOT, rel.endsWith('/') ? `${rel}index.html` : rel);
     if (!file.startsWith(ROOT)) {
       res.writeHead(403).end('forbidden');
       return;
