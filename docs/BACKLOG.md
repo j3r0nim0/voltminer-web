@@ -134,6 +134,29 @@ H/s a cold-start run delivers."* Our client re-creates workers on thread change 
 reconnect, which happens to sidestep this — but it means we must **not** "optimise" by
 reusing one Module across mining contexts once the JIT is in.
 
+**ST (no-SAB) variant measured 2026-10-06.** Built with our toolchain (`randomx_st.wasm`
+240 KB + 36 KB glue, vs 256 KB + 50 KB for the pthread build). The JIT works without
+SharedArrayBuffer — `RX_BUILD=st node bench/canonical_hash.mjs` PASSES the official vector,
+so it is correct by test, not by reading their build script.
+
+```
+no-SAB build, 4 threads, Apple M3   JIT on    95 H/s   (24/thread)
+                                    JIT off   27 H/s   ( 7/thread)     -> 3.5x
+for comparison, pthread build       JIT on   284 H/s   JIT off  60 H/s -> 4.7x
+```
+
+**The implication matters more than the multiplier.** The no-SAB build is ~3x slower in
+absolute terms than the shared-memory build, and ST+JIT (95) lands almost exactly on our
+*current* build (~110 H/s, interpreter, pthreads, 4 threads, headless Chrome). So for
+desktop/Android the ST variant buys nothing — the 2.6-3.4x is in the shared-memory build.
+Where ST+JIT does pay is exactly where we cannot use shared memory at all: it lifts that
+configuration 3.5x, which is the iOS-shaped case.
+
+Open question this raises: whether the no-SAB path should use their full-dataset *replica*
+mode instead (their README: 1F+3 = 293 H/s, ~2.3 GB per replica, weighting a replica at
+2.25x) — that would close most of the gap to the pthread build without SAB at a large RAM
+cost. `bench/fb_full_check.mjs` exists for it, unmeasured here.
+
 **Next step:** a true paired measurement — our build in their harness, or both in the
 browser — then lift the 4,900-line core and merge the four-call-site seam into our
 already-patched `vm_interpreted.cpp`.
