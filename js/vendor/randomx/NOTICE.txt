@@ -10,19 +10,27 @@ Files
 web-randomx-mt.js / web-randomx-mt.wasm   pthread build, one shared ~2 GB dataset
 web-randomx.js    / web-randomx.wasm      single-thread fallback (no SharedArrayBuffer)
 
-Built from https://github.com/WebCryptomining/WebRandomX @ 780908a with
-Emscripten 4.0.10, plus the patches in third_party/WebRandomX-overlay/
-(that folder carries the changed sources and build-web-randomx-mt.sh; the
-pthread link flags live in its CMakeLists.txt).
+web-randomx-mt is built from https://github.com/aa022/RandomX-bonanza @ f9848e3
+(a WebAssembly JIT backend on the RandomX engine) with Emscripten 4.0.10, plus
+the patches in third_party/RandomX-JIT-overlay/.
+web-randomx is built from https://github.com/WebCryptomining/WebRandomX @
+780908a with Emscripten 4.0.10, plus the patches in
+third_party/WebRandomX-overlay/.
 
 Bundled components and licences
 -------------------------------
-RandomX / WebRandomX ............... BSD-3-Clause
+RandomX engine ..................... BSD-3-Clause
                                      © 2018-2019 tevador <tevador@gmail.com>
                                      © 2014-2019 The Monero Project
   argon2_core.c, argon2_simd.c,
   blake2b.c ........................ same BSD-3-Clause notice
-Berkeley SoftFloat 3c .............. BSD-3-Clause
+wasm JIT backend (aa022) ........... CC0 1.0 (public domain; no obligations)
+jit_stubs/semifloat.c, mulh.c ...... BSD-3-Clause
+                                     © tevador <tevador@gmail.com>
+                                     © l-m <l-m@l-m.dev>
+                                     byte-identical to l1mey112/randomx.js; the
+                                     one obligation the CC0 does not cover
+Berkeley SoftFloat 3c .............. BSD-3-Clause (single-thread build only)
                                      © 2011-2017 The Regents of the University of California
 Emscripten runtime (glue, musl,
 dlmalloc, compiler-rt) ............. MIT or UIUC/NCSA

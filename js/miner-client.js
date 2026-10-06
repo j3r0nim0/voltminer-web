@@ -81,6 +81,9 @@ export function isValidWallet(address) {
   return new RegExp(`^(?:[48]${b58}{94}|4${b58}{105})$`).test(s);
 }
 
+/** Largest C++ thread count the slider and the client allow (shared dataset). */
+export const MAX_THREADS = 4;
+
 export function hardwareThreads() {
   const n = Number(navigator.hardwareConcurrency) || 4;
   return Math.max(1, Math.min(32, n));
@@ -102,15 +105,20 @@ export function isIOS() {
 }
 
 export function defaultThreadCount() {
-  // Deliberately restrained: 2 threads even on a big machine (the ceiling is
-  // still 4, and the slider is right there). A miner that grabs every core by
-  // default is the thing people are right to be suspicious of.
+  // Bonanza's optimizeArm rule (BACKLOG A3). navigator.hardwareConcurrency
+  // includes efficiency cores on big.LITTLE / Apple silicon, and extra
+  // full-dataset threads contend for memory bandwidth — measured, 4 -> 8
+  // workers gained only ~19% while per-worker fell ~40%. Count half, about the
+  // performance cores, then cap at the shared ceiling (4). The slider still
+  // reaches the ceiling, so this is a starting point, not a limit. The old
+  // value was a flat 2 on any machine with >= 4 cores, which left most laptops
+  // and desktops at half what they can use.
   if (!canShareDataset()) return 1;
   // iOS gets one thread whatever it reports. It refuses the ~2 GB fast dataset
   // and reclaims Wasm memory aggressively when the app is backgrounded, so the
   // extra pthreads buy nothing and cost stability on a phone.
   if (isIOS()) return 1;
-  return hardwareThreads() >= 4 ? 2 : 1;
+  return Math.max(1, Math.min(MAX_THREADS, Math.floor(hardwareThreads() / 2)));
 }
 
 export function loadOrCreateWorkerId() {
@@ -133,6 +141,7 @@ export class MinerClient {
     this.workers = [];
     this.job = null;
     this.connected = false;
+    this.fullDataset = false; // ~2.5 GB fast dataset is an explicit opt-in
     this.wantRun = false;
     this.reconnectTimer = null;
     this.statsTimer = null;
@@ -178,7 +187,7 @@ export class MinerClient {
     };
   }
 
-  start({ wallet, password, threads, bridgeUrl }) {
+  start({ wallet, password, threads, bridgeUrl, fullDataset }) {
     if (!isValidWallet(wallet)) throw new Error('Invalid Monero address');
     const url = bridgeUrl || defaultBridgeUrl();
     if (!url) {
@@ -206,8 +215,9 @@ export class MinerClient {
     this.wallet = /\+\d+$/.test(rawWallet) ? rawWallet : `${rawWallet}+10000`;
     this.password = password || 'x';
     this.threads = canShareDataset()
-      ? Math.max(1, Math.min(4, Number(threads) || 1))
+      ? Math.max(1, Math.min(MAX_THREADS, Number(threads) || 1))
       : 1;
+    this.fullDataset = canShareDataset() && fullDataset === true;
     this.bridgeUrl = url;
     this.lastWorkerAt = Date.now();
     this.#spawnWorkers(1);
@@ -262,7 +272,7 @@ export class MinerClient {
   }
 
   setThreads(n) {
-    this.threads = canShareDataset() ? Math.max(1, Math.min(4, Number(n) || 1)) : 1;
+    this.threads = canShareDataset() ? Math.max(1, Math.min(MAX_THREADS, Number(n) || 1)) : 1;
     for (const wrk of this.workers) {
       try { wrk.postMessage({ type: 'threads', n: this.threads }); } catch { /* ignore */ }
     }
@@ -542,7 +552,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=58', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=59', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');
@@ -558,6 +568,7 @@ export class MinerClient {
       this.#emit('error', { message: 'Hash worker message error.' });
     };
     this.workers.push(wrk);
+    try { wrk.postMessage({ type: 'config', fullDataset: this.fullDataset }); } catch { /* ignore */ }
     try { wrk.postMessage({ type: 'threads', n: this.threads }); } catch { /* ignore */ }
     if (this.job) wrk.postMessage({ type: 'job', job: this.job });
   }
@@ -592,7 +603,9 @@ export class MinerClient {
       this.#emit('status', {
         message: data.full
           ? 'RandomX fast/full dataset ready. Hashing with full mem.'
-          : `RandomX light/cache ready (${(data.ms / 1000).toFixed(1)}s). Will try chunked 2 GB dataset next.`,
+          : (this.fullDataset
+            ? `RandomX light/cache ready (${(data.ms / 1000).toFixed(1)}s). Building the ~2.5 GB dataset next.`
+            : `RandomX light/cache ready (${(data.ms / 1000).toFixed(1)}s). Staying in light mode (Fast dataset is opt-in).`),
       });
       return;
     }
@@ -600,7 +613,9 @@ export class MinerClient {
       this.wasmReady = !!data.wasm;
       this.#emit('status', {
         message: data.wasm
-          ? 'RandomX Wasm loaded. Building dataset next…'
+          ? (this.fullDataset
+            ? 'RandomX Wasm loaded. Building dataset next…'
+            : 'RandomX Wasm loaded. Hashing in light/cache mode…')
           : 'RandomX Wasm missing — hard-refresh (Cmd-Shift-R); the worker could not load web-randomx.js.',
       });
       return;

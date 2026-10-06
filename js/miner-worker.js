@@ -45,6 +45,9 @@ let hashing = true;
 let dsGen = 0;
 let cachedSeedHex = '';
 let cpuThreads = 1;
+// The ~2.5 GB fast dataset is an explicit opt-in (see js/mine.js); light/cache
+// is the soft default. Set from the client's { type:'config' } message.
+let fullDataset = false;
 
 function hexToBytes(hex) {
   const h = String(hex || '').replace(/[^0-9a-f]/gi, '');
@@ -103,7 +106,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=58', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=59', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -479,7 +482,17 @@ function loop() {
       ms: Math.round(performance.now() - tInit),
       n: first.n,
     });
-    dsPhase = 'try';
+    // Only allocate the ~2.5 GB dataset when the reader opted in. Otherwise
+    // stay on the light cache for the whole session (the previous behaviour,
+    // to grab it by default, is what made a first Start a 6-minute memory
+    // spike nobody asked for).
+    dsPhase = fullDataset ? 'try' : 'skip';
+    if (!fullDataset) {
+      postMessage({
+        type: 'status',
+        message: 'Mining in light/cache mode. Tick “Fast mode — ~2.5 GB dataset” before Start for full-dataset speed.',
+      });
+    }
     scheduleLoop(0);
     return;
   }
@@ -590,6 +603,9 @@ function loop() {
 
 onmessage = function (e) {
   const data = e.data || {};
+  if (data.type === 'config') {
+    fullDataset = data.fullDataset === true;
+  }
   if (data.type === 'threads') {
     cpuThreads = Math.max(1, Math.min(4, data.n | 0 || 1));
     if (rx && typeof rx.setThreads === 'function') rx.setThreads(cpuThreads);

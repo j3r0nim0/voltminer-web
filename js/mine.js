@@ -5,8 +5,9 @@ import {
   defaultThreadCount,
   canShareDataset,
   hardwareThreads,
+  MAX_THREADS,
   loadOrCreateWorkerId,
-} from './miner-client.js?v=58';
+} from './miner-client.js?v=59';
 
 const $ = (id) => document.getElementById(id);
 
@@ -14,6 +15,7 @@ const walletEl = $('wallet');
 const threadsEl = $('threads');
 const threadsVal = $('threads-val');
 const threadsMax = $('threads-max');
+const fullDatasetEl = $('full-dataset');
 const consentEl = document.querySelector('#mine-form input[name="consent"]') || $('consent-ok');
 const form = $('mine-form');
 const startBtn = $('start');
@@ -33,12 +35,12 @@ if ($('js-gate')) $('js-gate').hidden = true;
 const workerId = loadOrCreateWorkerId();
 
 if (canShareDataset()) {
-  const max = Math.max(1, Math.min(4, hardwareThreads()));
+  const max = Math.max(1, Math.min(MAX_THREADS, hardwareThreads()));
   const def = defaultThreadCount();
   threadsEl.max = String(max);
   threadsEl.value = String(def);
   threadsEl.disabled = false;
-  threadsMax.textContent = `(${max} C++ threads, one 2 GB dataset — web.voltminer.net)`;
+  threadsMax.textContent = `(${max} C++ threads — shared dataset only with Fast mode)`;
   threadsVal.textContent = String(def);
 } else {
   threadsEl.max = '1';
@@ -264,6 +266,8 @@ function startMining() {
       password: workerId,
       threads: Number(threadsEl.value),
       throttle: 0,
+      // ~2.5 GB fast dataset is opt-in; light/cache is the default.
+      fullDataset: !!(fullDatasetEl && fullDatasetEl.checked),
     });
   } catch (err) {
     setStatus(err.message || String(err));

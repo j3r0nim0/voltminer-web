@@ -31,13 +31,15 @@ else's address on the MoneroOcean dashboard.
 3. **Check the bytes you were served.**
    `curl -s https://web.voltminer.net/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256`
    and compare with `SHA256SUMS` in this folder.
-4. **Check the wasm is a build of public code.** `wasm-patch/` holds every file
-   we changed on top of [WebCryptomining/WebRandomX](https://github.com/WebCryptomining/WebRandomX)
-   at commit `780908a`, plus `build-web-randomx-mt.sh` (Docker + Emscripten
-   4.0.10) that reproduces the binary. The patch is small: the nonce is written
-   little-endian at blob byte 39, a pthread mine path, a wasm32 dataset-pointer
-   fix, and a thread-local floating-point rounding mode (a shared global made
-   concurrent hashes wrong — see the developer blog).
+4. **Check the wasm is a build of public code.** `wasm-patch/` is the
+   shared-memory `web-randomx-mt` build: every file we changed on top of
+   [aa022/RandomX-bonanza](https://github.com/aa022/RandomX-bonanza) at commit
+   `f9848e3` — a WebAssembly JIT backend on the RandomX engine — plus
+   `build-web-randomx-mt.sh` (Docker + Emscripten 4.0.10) that reproduces it. The
+   patch is small: our API shim (little-endian nonce at blob byte 39, a pthread
+   mine path, the chunked dataset API) and three edits to their build script.
+   The single-thread `web-randomx` binary is the earlier WebRandomX build; its
+   overlay is `wasm-patch-webrandomx/`.
 5. **Read the relay.** `relay/` is the entire server: it accepts one WebSocket
    from an allowlisted Origin, opens one TLS connection to the pool's host and
    port (both hardcoded, certificate pinned by SHA-256), checks each line is
@@ -82,6 +84,7 @@ stored anywhere on our side.
 Security reports: <https://github.com/j3r0nim0/android-xmrig-monero/security/advisories/new>
 (or `/.well-known/security.txt`). Everything else: <https://voltminer.net/about.html#contact>.
 
-Third-party licences for the bundled Wasm (RandomX/WebRandomX and Berkeley
-SoftFloat are BSD-3-Clause; the Emscripten runtime is MIT) are in
-`js/vendor/randomx/NOTICE.txt` and <https://web.voltminer.net/notices.html>.
+Third-party licences for the bundled Wasm (the RandomX engine and Berkeley
+SoftFloat are BSD-3-Clause; the wasm JIT backend is CC0; `jit_stubs/semifloat.c`
+and `mulh.c` are BSD-3-Clause © tevador and l-m; the Emscripten runtime is MIT)
+are in `js/vendor/randomx/NOTICE.txt` and <https://web.voltminer.net/notices.html>.

@@ -613,3 +613,42 @@ testable:
    large constant factor -- the same class of loss found in the Anvil Android build.
 
 Do not claim a speedup until this is resolved with a clean measurement.
+
+---
+
+## The four handoff tasks — done, 2026-10-06 (second pass)
+
+1. **Stray headless Chrome.** None remained: the pile from the previous session's runs was
+   already gone and the only headless Chrome left was the soak's own tree. No broad `pkill`
+   was run — `pkill -f Chrome` / `killall Chrome` would have killed the user's real browser
+   (`Google Chrome --no-startup-window`, PID 63480). Verified after: 0 processes match
+   `--headless`, the user's browser is intact.
+2. **Soak — PASS.** A `SECONDS=300 THREADS=2 URL=…?relay=… LOG=/tmp/soak-jit3.log` run
+   completed: `ds=100% full`, `ok=1`, `submit … local=ok` and `accepted total=1`, **0
+   rejected**, 44.8 H/s, soak=5:03. (The FINAL tally block reads 0 — the broken field the
+   handoff warns about; the authoritative lines are the submit row and `accepted total=N`.)
+   **The performance question is still open, and this run narrows it:** 44.8 H/s at 2 threads
+   is *the same* 22 H/s/thread as the previous, contended measurement, on a machine with no
+   stray Chromes. So machine load (suspect 1) is not the cause; the AES path (suspect 2,
+   `aes=0`, relaxed-SIMD blob not rebuilt) is still the live explanation. Do not claim a
+   speedup yet.
+3. **Transparency.** `transparency/wasm-patch/` now describes the shipped pthread binary:
+   built from `aa022/RandomX-bonanza` `f9848e3` + our shim, with
+   `against-upstream-f9848e3.patch`, the shim (`wasm/src/src/web_randomx.{cpp,h}`) and
+   `build-web-randomx-mt.sh`. Source overlay added at `third_party/RandomX-JIT-overlay/`.
+   The single-thread `web-randomx` binary is still the WebRandomX `780908a` build, so its
+   overlay stays and is now published as `transparency/wasm-patch-webrandomx/`. `deploy.sh`
+   step 2 guards **both** mirrors. `notices.html` (+ `NOTICE.txt`, `verify.md`,
+   `transparency/index.html`) updated: the JIT backend is CC0, and
+   `jit_stubs/semifloat.c` / `mulh.c` — byte-identical to `l1mey112/randomx.js` — carry the
+   BSD-3 notice (© tevador and l-m) that the CC0 does not cover.
+4. **Policy.** `defaultThreadCount()` is now `min(4, floor(hardwareThreads()/2))` — Bonanza's
+   `optimizeArm` rule, capped at the shared ceiling (was a flat 2 for any machine ≥ 4 cores).
+   The ~2.5 GB fast dataset is now an explicit opt-in (`#full-dataset`, default off) plumbed
+   through `MinerClient.start({ fullDataset })` to the worker, which only enters the
+   `dsPhase='try'` dataset build when opted in; light/cache is the soft default. Page version
+   bumped to `?v=59`. Headless smoke test: page loads, checkbox present and unchecked,
+   threads default 4 on an 8-core box, no page errors.
+
+**Still open:** the performance measurement (task 2 above), and a post-change soak (the soak
+harness does not tick the new opt-in box, so a naive re-run now mines in light mode).

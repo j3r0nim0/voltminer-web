@@ -36,12 +36,16 @@
       </div>
 
       <div class="card">
-        <h3>RandomX · WebRandomX</h3>
-        <p class="note">Bundled as <span class="mono">js/vendor/randomx/web-randomx-mt.{js,wasm}</span>
-          (pthread build) and <span class="mono">js/vendor/randomx/web-randomx.{js,wasm}</span>
-          (single-thread build). Built from
+        <h3>RandomX — two builds</h3>
+        <p class="note">Two binaries ship, both the same algorithm and both producing identical
+          hashes. The shared-memory <span class="mono">js/vendor/randomx/web-randomx-mt.{js,wasm}</span>
+          (pthread build) is built from <span class="mono">github.com/aa022/RandomX-bonanza</span>
+          at commit <span class="mono">f9848e3</span> — the RandomX engine plus a WebAssembly JIT
+          backend — with Emscripten 4.0.10 and the patches in
+          <span class="mono">third_party/RandomX-JIT-overlay/</span>. The single-thread
+          <span class="mono">js/vendor/randomx/web-randomx.{js,wasm}</span> is built from
           <span class="mono">github.com/WebCryptomining/WebRandomX</span> at commit
-          <span class="mono">780908a</span> with Emscripten 4.0.10, plus the patches in
+          <span class="mono">780908a</span> with the patches in
           <span class="mono">third_party/WebRandomX-overlay/</span>.
           Licence: BSD-3-Clause.</p>
         <pre class="hash-log" style="height:auto; max-height:none;">Copyright (c) 2018-2019, tevador &lt;tevador@gmail.com&gt;
@@ -77,8 +81,25 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</pre>
       </div>
 
       <div class="card">
+        <h3>wasm JIT backend (CC0) · l1mey112's stubs (BSD-3)</h3>
+        <p class="note">The WebAssembly JIT backend in the pthread build
+          (<span class="mono">wasm_jit_*.{c,h}</span>, <span class="mono">wasm_jit_fuse_table.h</span>,
+          <span class="mono">rx_aes_relaxed_blob*.h</span>, and the edits to the RandomX core) is
+          dedicated to the public domain under <strong>CC0 1.0</strong> by aa022 — no
+          obligations.</p>
+        <p class="note">Two files in that build are <strong>not</strong> aa022's and are
+          <strong>not</strong> covered by the CC0:
+          <span class="mono">src/jit_stubs/semifloat.c</span> and
+          <span class="mono">src/jit_stubs/mulh.c</span>. They are byte-identical to
+          <span class="mono">github.com/l1mey112/randomx.js</span> and stay under
+          <strong>BSD-3-Clause</strong>, © tevador &lt;tevador@gmail.com&gt; and
+          l-m &lt;l-m@l-m.dev&gt;, under the three conditions reproduced above. Their
+          copyright notice is retained in source.</p>
+      </div>
+
+      <div class="card">
         <h3>Berkeley SoftFloat 3c</h3>
-        <p class="note">Compiled into the WebAssembly module
+        <p class="note">Compiled into the single-thread WebRandomX build
           (<span class="mono">softfloat.cpp</span>, <span class="mono">softfloat.hpp</span>) to
           emulate IEEE-754 rounding that WebAssembly cannot express. Licence: BSD-3-Clause.</p>
         <p class="note">Copyright 2011, 2012, 2013, 2014, 2015, 2016, 2017 The Regents of the

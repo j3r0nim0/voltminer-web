@@ -91,15 +91,22 @@ if [ -n "$UNTRACKED" ]; then
   warn "untracked, will be published: $(printf '%s' "$UNTRACKED" | tr '\n' ' ')"
 fi
 
-# ── 2. the published C++ mirror is a copy, and copies drift ─────────────────
-say "2. published wasm patch mirrors its source"
-if diff -rq --exclude=README.md third_party/WebRandomX-overlay transparency/wasm-patch >/dev/null 2>&1; then
-  ok "transparency/wasm-patch == third_party/WebRandomX-overlay"
-else
-  die "the published C++ no longer matches the source it mirrors. Resync it:
-  rsync -a --delete --exclude=README.md third_party/WebRandomX-overlay/ transparency/wasm-patch/
+# ── 2. the published C++ mirrors are copies, and copies drift ───────────────
+say "2. published wasm patches mirror their source"
+# Two wasm binaries ship, built from two bases: the shared-memory web-randomx-mt
+# is the RandomX-bonanza JIT build, the single-thread web-randomx is the earlier
+# WebRandomX build. Each has its own overlay and each overlay is published.
+check_mirror() { # $1 = source under third_party/, $2 = published under transparency/
+  if diff -rq --exclude=README.md "$1" "$2" >/dev/null 2>&1; then
+    ok "$2 == $1"
+  else
+    die "the published C++ no longer matches the source it mirrors: $2 != $1. Resync it:
+  rsync -a --delete --exclude=README.md $1/ $2/
   then re-run this script. (Publishing code that is not the code you compiled is the one thing transparency/ must never do.)"
-fi
+  fi
+}
+check_mirror third_party/RandomX-JIT-overlay transparency/wasm-patch
+check_mirror third_party/WebRandomX-overlay transparency/wasm-patch-webrandomx
 
 # ── 3. hashes describe exactly what step 4 will push ────────────────────────
 say "3. regenerate published hashes"

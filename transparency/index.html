@@ -42,10 +42,12 @@
       <li><strong>Check the bytes you were served.</strong>
         <span class="mono">curl -s https://web.voltminer.net/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256</span>
         and compare with <a href="SHA256SUMS">SHA256SUMS</a>.</li>
-      <li><strong>Check the wasm is a build of public code.</strong> <a href="wasm-patch/">wasm-patch/</a> has every file we
-        changed on top of <a href="https://github.com/WebCryptomining/WebRandomX" target="_blank" rel="noopener">WebRandomX</a>
-        <span class="mono">780908a</span>, plus <span class="mono">build-web-randomx-mt.sh</span> (Docker + Emscripten 4.0.10)
-        that reproduces the binary.</li>
+      <li><strong>Check the wasm is a build of public code.</strong> <a href="wasm-patch/">wasm-patch/</a> is the
+        shared-memory <span class="mono">web-randomx-mt</span> build: every file we changed on top of
+        <a href="https://github.com/aa022/RandomX-bonanza" target="_blank" rel="noopener">RandomX-bonanza</a>
+        <span class="mono">f9848e3</span>, plus <span class="mono">build-web-randomx-mt.sh</span> (Docker + Emscripten 4.0.10)
+        that reproduces it. The single-thread <span class="mono">web-randomx</span> binary is the earlier WebRandomX build —
+        its overlay is <a href="wasm-patch-webrandomx/">wasm-patch-webrandomx/</a>.</li>
       <li><strong>Read the relay.</strong> <a href="relay/server.mjs">relay/server.mjs</a> is the entire server: one WebSocket
         from an allowlisted Origin, one TLS connection to the pool's host/port (hardcoded, certificate pinned by SHA-256),
         each line checked for JSON validity, then forwarded. It never rewrites a login, a job or a share.</li>
@@ -74,8 +76,9 @@
       <a href="https://github.com/j3r0nim0/android-xmrig-monero/security/advisories/new" target="_blank" rel="noopener">GitHub advisories</a>
       (also <a href="../.well-known/security.txt">/.well-known/security.txt</a>). Everything else:
       <a href="https://voltminer.net/about.html#contact">contact</a>.</p>
-    <p class="note">Third-party licences for the bundled Wasm (RandomX/WebRandomX and Berkeley SoftFloat are
-      BSD-3-Clause; the Emscripten runtime is MIT) are in
+    <p class="note">Third-party licences for the bundled Wasm (the RandomX engine and Berkeley SoftFloat are
+      BSD-3-Clause; the wasm JIT backend is CC0; <span class="mono">jit_stubs/semifloat.c</span> and
+      <span class="mono">mulh.c</span> are BSD-3-Clause © tevador and l-m; the Emscripten runtime is MIT) are in
       <a href="../js/vendor/randomx/NOTICE.txt">NOTICE.txt</a> and <a href="../notices.html">notices.html</a>.</p>
   </div>
 </div></section>

@@ -19,7 +19,7 @@
 
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="css/styles.css?v=58" />
+  <link rel="stylesheet" href="css/styles.css?v=59" />
 </head>
 <body>
   <header class="nav">
@@ -76,10 +76,10 @@
           <li><strong>Your wallet, your coins.</strong> The address goes to the pool as the stratum login. VoltMiner never holds XMR.</li>
           <li><strong>0% fee.</strong> We take no cut of the hashrate and never swap your payout address. MoneroOcean may apply its own pool fee.</li>
           <li><strong>Ad-blockers will fight this.</strong> uBlock Origin and some antivirus flag Wasm miners even with consent. Pause them on this page or the WebSocket never opens.</li>
-          <li><strong>Desktop and Android first.</strong> Fast mode pins about 3.5 GB inside the tab, so 8 GB machines may swap or fall back to cache-only mode.</li>
+          <li><strong>Desktop and Android first.</strong> <strong>Fast mode is opt-in</strong> and pins about 3.5 GB inside the tab, so 8 GB machines may swap; leave it unchecked for a light/cache session that needs far less RAM.</li>
           <li><strong>iPhone / iPad runs, slowly.</strong> It installs to the Home Screen and hashes, but iOS refuses the ~2 GB fast-mode dataset, so it stays in light mode — and it only runs while the app is open in front of you. Lock the screen and it stops.</li>
           <li><strong>It runs as an app, not a background service.</strong> Installed, it opens full-screen with no address bar and works offline from its own cache. Closing it stops the hashing; nothing keeps running behind your back.</li>
-          <li><strong>One dataset, extra cores.</strong> This page is cross-origin isolated, so the C++ pthreads share a single ~2 GB dataset — each extra thread adds only its scratchpad. Interpreted Wasm: tens of H/s, not thousands.</li>
+          <li><strong>One dataset, extra cores.</strong> With Fast mode on (and this page cross-origin isolated) the C++ pthreads share a single ~2 GB dataset — each extra thread adds only its scratchpad. The default is light/cache mode. Wasm: tens to low-hundreds of H/s, not thousands.</li>
           <li><strong>Keep the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can get the relay rate-limited.</li>
           <li><strong>RandomX, interpreted.</strong> Same algorithm family as native miners (<code>rx/0</code>), but no huge pages and no JIT in Wasm.</li>
           <li><strong>Why a relay.</strong> A browser cannot open the pool's TLS stratum socket, so a small origin-locked relay on our VPS forwards the WebSocket to the pool. It does not rewrite your login, the job, or the shares in either direction.</li>
@@ -102,6 +102,7 @@
             <span><strong>I agree — start hashing on this device</strong> to the wallet above. Ad-blockers may need to be paused.</span>
           </label>
 
+          <label class="opt-row"><input type="checkbox" id="full-dataset" /><span><strong>Fast mode</strong> — build and use the ~2.5 GB RandomX dataset (opt-in; more RAM, slower first start)</span></label>
           <label class="opt-row"><input type="checkbox" id="charging-only" /><span>Only mine while charging</span></label>
           <label class="opt-row"><input type="checkbox" id="cap60" /><span>Stop after 60 minutes</span></label>
 
@@ -204,7 +205,7 @@
   <!-- Replaces js/anti-pwa.js. That file unregistered service workers so the page
        could never serve a stale copy of itself; the page installs as an app now,
        so the guard moved into sw.js (network-first navigations) instead. -->
-  <script src="js/pwa.js?v=58"></script>
-  <script type="module" src="js/mine.js?v=58"></script>
+  <script src="js/pwa.js?v=59"></script>
+  <script type="module" src="js/mine.js?v=59"></script>
 </body>
 </html>
