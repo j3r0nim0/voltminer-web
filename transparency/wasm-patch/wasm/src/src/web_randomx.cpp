@@ -5,6 +5,10 @@
 #include <limits.h>
 
 #include "randomx.h"
+/* For RANDOMX_PROGRAM_SIZE_V2, which is how light_flags() below detects a core
+   that knows about RandomX v2. randomx.h does not pull configuration.h in, so
+   without this include that test is silently false and the guard never exists. */
+#include "configuration.h"
 #include "web_randomx.h"
 
 #if defined(__EMSCRIPTEN_PTHREADS__)
@@ -145,6 +149,14 @@ static randomx_flags light_flags(void) {
   randomx_flags flags = randomx_flags(enabled_flags() & ~disabled_flags());
   flags = randomx_flags(flags & ~RANDOMX_FLAG_LARGE_PAGES);
   flags = randomx_flags(flags & ~RANDOMX_FLAG_FULL_MEM);
+#ifdef RANDOMX_PROGRAM_SIZE_V2
+  /* Never v2. The network still runs rx/0 v1 (program size 256) and a v2 hash
+     is a different function, so every share would be rejected by the pool while
+     the miner reported a healthy hashrate. The bit comes from
+     randomx_get_flags(), which is the core's to change, so strip it explicitly
+     instead of trusting upstream to keep leaving it clear. */
+  flags = randomx_flags(flags & ~RANDOMX_FLAG_V2);
+#endif
   return flags;
 }
 

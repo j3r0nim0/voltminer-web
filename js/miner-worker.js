@@ -167,6 +167,31 @@ function bindHeap() {
   rx.found = new Int32Array(buf, rx.foundPtr, 1);
 }
 
+/* The RandomX v1 reference vector: seed = 32 zero bytes, blob = 76 zero bytes
+   with nonce 01000000 little-endian at byte 39. The same vector diag.html
+   checks, and the same hash the shipped build produces. Returns '' when the
+   engine agrees with the network, else why it does not. */
+const REFERENCE_HASH = '30aed56ecfba3f935eb906a633c3c412bb5361175bb3dda93070f08615c45c6f';
+function referenceVectorFailure() {
+  try {
+    const m = rx.module;
+    const seedPtr = m._malloc(32), blobPtr = m._malloc(76), hashPtr = m._malloc(32);
+    new Uint8Array(m.HEAPU8.buffer, seedPtr, 32).fill(0);
+    const blob = new Uint8Array(m.HEAPU8.buffer, blobPtr, 76);
+    blob.fill(0);
+    blob[39] = 1;
+    const ok = m._randomx_hash(0n, 0n, seedPtr, blobPtr, 76, hashPtr);
+    const got = [...new Uint8Array(m.HEAPU8.buffer, hashPtr, 32)]
+      .map((b) => b.toString(16).padStart(2, '0')).join('');
+    try { m._free(seedPtr); m._free(blobPtr); m._free(hashPtr); } catch { /* ignore */ }
+    if (!ok) return 'the wasm refused to hash';
+    if (got !== REFERENCE_HASH) return `expected ${REFERENCE_HASH.slice(0, 16)}…, got ${got.slice(0, 16)}…`;
+    return '';
+  } catch (e) {
+    return String((e && e.message) || e).slice(0, 120);
+  }
+}
+
 function loadWasm() {
   if (modulePromise) return modulePromise;
   modulePromise = (async () => {
@@ -195,7 +220,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=63', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=64', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -225,6 +250,20 @@ function loadWasm() {
       };
       bindHeap();
       if (typeof rx.setThreads === 'function') rx.setThreads(cpuThreads);
+      /* Refuse to mine unless the engine reproduces the v1 reference vector.
+         This is the only cheap way to catch a build that hashes with a
+         different function — a core update that selects RandomX v2, say.
+         verifySolved() cannot see it: it re-hashes with the same wrong
+         function and reports success. Without this check the pool is the only
+         thing that notices, one rejected share at a time. */
+      const refFail = referenceVectorFailure();
+      if (refFail) {
+        postMessage({
+          type: 'status',
+          message: `Hash self-test failed (${refFail}). Refusing to mine — this build does not agree with the network's RandomX v1, so the pool would reject every share.`,
+        });
+        return false;
+      }
       postMessage({
         type: 'status',
         message: (USE_MT

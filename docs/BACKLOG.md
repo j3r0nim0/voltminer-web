@@ -786,3 +786,54 @@ from the worker's own `nonceBase`, not the panel. Two full passes, 120 s each:
   the cold start, settling to ~245 true — matching 263-278 here.
 - Committed wasm heap in Fast mode after the fill: **2445 MiB** (vs the old fixed
   3584 MiB floor; light mode stays 16 MiB). Dataset fill took ~89 s here.
+
+## RandomX v1/v2 guards, and the port feasibility pass (2026-10-07)
+
+**There is no v2 hard fork scheduled.** Monero's `mainnet_hard_forks[]` ends at
+v16 (block 2689608, 2022-07) and its `external/randomx` submodule is pinned to
+`12f2c2ff` "Prepare v1.2.3" (2026-07-17) — which *is* the head of tevador's
+`v1.x` branch, tagged five months after v2 landed. Monero deliberately stayed on
+v1 and has zero references to `RANDOMX_FLAG_V2`. v2 (program 256 -> 384) is a
+different function: a v2 build hashes differently, so every share is rejected
+while the miner still reports a healthy hashrate. Watch three signals, cheapest
+first: the submodule sha, a v17 in `hardforks.cpp`, Monero's release notes.
+`tools/check-randomx-version.sh` checks all three and exits 1 when v1 is left.
+
+**Guard 1 - the shim strips the flag.** `light_flags()` now does
+`flags &= ~RANDOMX_FLAG_V2`, feature-tested on `RANDOMX_PROGRAM_SIZE_V2`. The
+first attempt was silently dead: the shim includes only `randomx.h`, which does
+not pull in `configuration.h`, so the `#ifdef` was false and the guard compiled
+out. Fixed by including `configuration.h` and confirmed with the preprocessor.
+
+  It is also **zero-cost**: the rebuilt wasm is byte-identical
+  (`da62fd10…`) with the guard live. `enabled_flags() & ~disabled_flags()`
+  provably has bit 7 clear because `randomx_get_flags()` cannot set it, so LTO
+  eliminates the mask. That also *proves* this core cannot select v2 today, and
+  the guard materialises only if a future core makes bit 7 reachable.
+
+**Guard 2 - the worker refuses to hash a wrong function** (`js/miner-worker.js`).
+At load it hashes the v1 reference vector and bails with an error status on
+mismatch. `verifySolved()` cannot catch this class of bug: it re-hashes with the
+same wrong function and reports success. Without this the pool is the only thing
+that notices, one rejected share at a time.
+
+**Port feasibility (option a: JIT onto the 2019 WebRandomX core).** Compiled each
+JIT translation unit against the old core's headers:
+
+- **5 of 8 compile unchanged** - `wasm_jit_decode.c`, `_gen.c`, `_inst.c`,
+  `_leb128.c`, `_threaded.c`. The codegen core is core-agnostic.
+- **The 3 C++ integration TUs fail** on `DecodedSuperscalarProgram`, a struct the
+  modern core added (superscalar.hpp) and the old one lacks, plus
+  `intrin_portable.h` (the old core ships `intrin_wasm.h`).
+- Header drift is wide: bytecode_machine.hpp 682 changed lines, randomx.h 536,
+  common.hpp 376, superscalar.hpp 155.
+
+So the port is real but bounded: codegen ports cleanly, the integration layer and
+the FP model (softfloat vs SIMD doubles) are the work.
+
+**Performance: the cores are a tie, so this is an engineering decision, not a
+performance one.** Measured single-threaded light-mode, same conditions:
+2019 core interpreted 32.0 ms, bonanza core interpreted 32.6 ms (0.98x - noise);
+bonanza with the JIT 6.2 ms (program reused) / 8.4 ms (fresh nonce each hash,
+i.e. real mining). The JIT is worth 3.6-5.3x and the core version is worth
+nothing. "2019 core + JIT" would land in the same place as what ships.

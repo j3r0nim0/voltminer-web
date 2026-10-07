@@ -6,7 +6,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '63';
+  const VERSION = '64';
   const $ = (id) => document.getElementById(id);
   const supportsSW = 'serviceWorker' in navigator;
   const secureContext = location.protocol === 'https:' ||
