@@ -86,6 +86,12 @@ export function isValidWallet(address) {
     wasm clamps to the same number, so a higher slider value would be a no-op. */
 export const MAX_THREADS = 32;
 
+/** Worker count in an origin that cannot share a dataset (no SAB / no COOP+COEP).
+    Each worker is an independent single-thread light-mode engine: its own ~256 MB
+    cache, its own random nonce base, so they do not duplicate work. 4 x ~260 MB
+    fits a desktop; iOS is pinned to one for memory (see threadsForPercent). */
+export const ST_MAX_WORKERS = 4;
+
 /** The thread slider works in percent of cores, not a raw count. */
 export const THREAD_PERCENTS = [25, 50, 75, 100];
 const DEFAULT_THREAD_PERCENT = 50;
@@ -117,7 +123,14 @@ export function isIOS() {
     Capped at MAX_THREADS. Whatever the percent, an origin that cannot share
     the dataset — or any iOS browser — runs a single thread. */
 export function threadsForPercent(percent) {
-  if (!canShareDataset()) return 1;
+  // No shared dataset: the same percent picks independent single-thread workers
+  // (light mode only — full-dataset mode is strictly slower on one thread, and
+  // the serial 2 GB fill costs ~7 min), capped at ST_MAX_WORKERS for memory.
+  if (!canShareDataset()) {
+    if (isIOS()) return 1;
+    const p = Math.max(1, Math.min(100, Number(percent) || DEFAULT_THREAD_PERCENT));
+    return Math.max(1, Math.min(ST_MAX_WORKERS, Math.round((p / 100) * hardwareThreads())));
+  }
   // iOS gets one thread whatever it reports. It refuses the ~2 GB fast dataset
   // and reclaims Wasm memory aggressively when the app is backgrounded, so the
   // extra pthreads buy nothing and cost stability on a phone.
@@ -132,7 +145,7 @@ export function threadsForPercent(percent) {
     and extra full-dataset threads contend for memory bandwidth, so half the
     reported cores is a good starting point — not a limit. */
 export function defaultThreadPercent() {
-  if (!canShareDataset() || isIOS()) return 25;
+  if (isIOS()) return 25;
   return DEFAULT_THREAD_PERCENT;
 }
 
@@ -194,6 +207,7 @@ export class MinerClient {
       connected: this.connected,
       running: this.wantRun,
       threads: this.threads,
+      workers: this.workers.length,
       hashrate: this.hashrate,
       totalHashes: this.totalHashes,
       accepted: this.accepted,
@@ -232,10 +246,15 @@ export class MinerClient {
     this.threads = canShareDataset()
       ? Math.max(1, Math.min(MAX_THREADS, Number(threads) || 1))
       : 1;
+    // One worker in the shared-dataset case (it parallelises internally with
+    // pthreads). Without SAB: N independent light-mode workers.
+    this.workerCount = canShareDataset()
+      ? 1
+      : Math.max(1, Math.min(ST_MAX_WORKERS, Number(threads) || 1));
     this.fullDataset = canShareDataset() && fullDataset === true;
     this.bridgeUrl = url;
     this.lastWorkerAt = Date.now();
-    this.#spawnWorkers(1);
+    this.#spawnWorkers(this.workerCount);
     this.#connect();
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = setInterval(() => {
@@ -293,6 +312,11 @@ export class MinerClient {
 
   setThreads(n) {
     this.threads = canShareDataset() ? Math.max(1, Math.min(MAX_THREADS, Number(n) || 1)) : 1;
+    const want = canShareDataset() ? 1 : Math.max(1, Math.min(ST_MAX_WORKERS, Number(n) || 1));
+    if (want !== this.workerCount || this.workers.length !== want) {
+      this.workerCount = want;
+      this.#resizeWorkers(want);
+    }
     for (const wrk of this.workers) {
       try { wrk.postMessage({ type: 'threads', n: this.threads }); } catch { /* ignore */ }
     }
@@ -563,16 +587,21 @@ export class MinerClient {
   }
 
   #spawnWorkers(n) {
-    if (this.workers.length >= 1) {
+    const want = Math.max(1, Math.min(8, n | 0 || 1));
+    if (this.workers.length === want) {
       this.#resumeWorkers();
       return;
     }
-    this.#killWorkers();
-    for (let i = 0; i < n; i++) this.#addWorker();
+    this.#resizeWorkers(want); // #addWorker replays config + job for newcomers
+  }
+
+  #resizeWorkers(n) {
+    while (this.workers.length > n) this.#removeWorker();
+    while (this.workers.length < n) this.#addWorker();
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=68', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=69', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');

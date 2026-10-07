@@ -6,8 +6,9 @@ import {
   threadsForPercent,
   canShareDataset,
   hardwareThreads,
+  isIOS,
   loadOrCreateWorkerId,
-} from './miner-client.js?v=68';
+} from './miner-client.js?v=69';
 
 const $ = (id) => document.getElementById(id);
 
@@ -41,12 +42,12 @@ function updateThreadsLabel(percent) {
   threadsVal.textContent = `${pct}%`;
   threadsMax.textContent = canShareDataset()
     ? `(${threadsForPercent(pct)} of ${hardwareThreads()} C++ threads — shared dataset only with Fast mode)`
-    : '(one Wasm worker — this origin cannot share the dataset)';
+    : `(${threadsForPercent(pct)} of ${hardwareThreads()} independent Wasm workers — this origin cannot share the dataset)`;
 }
 
 const defPct = defaultThreadPercent();
 threadsEl.value = String(defPct);
-threadsEl.disabled = !canShareDataset();
+threadsEl.disabled = isIOS();
 updateThreadsLabel(defPct);
 $('st-wid').textContent = workerId;
 $('st-wid-inline').textContent = workerId;
