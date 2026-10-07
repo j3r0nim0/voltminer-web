@@ -1,0 +1,3 @@
+# npm dependencies are reproduced with `npm ci` from the committed lockfile, never
+# committed themselves (tools/web-stratum-bridge depends on exactly one: `ws`).
+node_modules/

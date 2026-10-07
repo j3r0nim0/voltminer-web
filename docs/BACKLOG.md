@@ -901,3 +901,36 @@ performance one.** Measured single-threaded light-mode, same conditions:
 bonanza with the JIT 6.2 ms (program reused) / 8.4 ms (fresh nonce each hash,
 i.e. real mining). The JIT is worth 3.6-5.3x and the core version is worth
 nothing. "2019 core + JIT" would land in the same place as what ships.
+
+## Hosting your own TCP hop — the CSP blocker (2026-10-07, decision open)
+
+Intent: let a user run their own WebSocket -> TLS hop (`tools/web-stratum-bridge/`,
+`node server.mjs`) instead of the shared `wss://bridge.voltminer.net`. The bridge is already
+shaped for that: hardcoded upstream (`gulf.moneroocean.stream:20032`, TLS), origin allowlist
+(`ALLOW_ORIGINS`), session/idle caps (`BRIDGE_MAX_SESSIONS`, `BRIDGE_IDLE_MS`),
+`BRIDGE_HOST`/`BRIDGE_PORT`, and it refuses a non-loopback bind unless
+`BRIDGE_ALLOW_INSECURE=1`. One dependency (`ws`), and `package-lock.json` is committed, so
+`npm ci` reproduces it — which is why `tools/web-stratum-bridge/node_modules/` is now in
+`.gitignore` and stays out of git.
+
+**The blocker is the page's CSP, not the bridge.** Production is served with
+`connect-src 'self'` (`tools/server/Caddyfile:50`), deliberately: `js/miner-client.js:27`
+says "One host, so a strict Content-Security-Policy can say `connect-src 'self'`", and
+`transparency/index.html` advertises it as a trust property ("no analytics, no CDN"). So from
+`https://voltminer.net`, `?relay=wss://<user-host>` is blocked by the browser before any
+connection is attempted. The override works on localhost only because `tools/dev-server.mjs`
+sends no CSP — that is why the 2026-10-07 localhost soaks could point at
+`ws://127.0.0.1:8788`.
+
+Three shapes, mutually exclusive — pick one before writing any hosting doc:
+
+1. **Self-host the page too.** The user serves the repo from their own host, so their own
+   headers cover `connect-src 'self'` and the hop is theirs. Costs nothing in our security
+   story; most setup for the user.
+2. **Relax `connect-src` on the mining page** (`wss:` or a host allowlist). The one-host
+   bridge becomes optional, but we give up the exfiltration claim that page currently makes;
+   `?relay=` visible in the address bar is then the only guard.
+3. **Keep one bridge host** and document self-hosting as a DIY path for forkers.
+
+Until one is picked, the honest position in any user-facing text is that the page talks to one
+bridge.

@@ -63,6 +63,12 @@ Tests (no pool): `npm test`
 
 Do **not** bind `0.0.0.0:8787` to the public internet without TLS.
 
+**Serving the page from voltminer.net?** That site's CSP is `connect-src 'self'`
+(`tools/server/Caddyfile:50`), so a page served from there cannot reach this hop — deliberate,
+it is what keeps the site's "one host, no exfiltration endpoint" claim honest. To mine through
+your own hop, serve the page from your own origin too. Options and tradeoffs:
+`docs/BACKLOG.md` -> "Hosting your own TCP hop".
+
 ## What this does not do
 
 - Compile RandomX Wasm. See `website/js/vendor/randomx/NOTICE.txt`.
