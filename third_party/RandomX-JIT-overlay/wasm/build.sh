@@ -201,7 +201,7 @@ fi
 emcc -O3 -flto -DNDEBUG -msimd128 -pthread \
   -s WASM=1 \
   -s USE_PTHREADS=1 \
-  -s PTHREAD_POOL_SIZE=8 \
+  -s 'PTHREAD_POOL_SIZE=Math.min(navigator.hardwareConcurrency||8,32)' \
   -s PTHREAD_POOL_SIZE_STRICT=0 \
   -s STACK_SIZE=1048576 \
   -s DEFAULT_PTHREAD_STACK_SIZE=1048576 \
@@ -211,7 +211,7 @@ emcc -O3 -flto -DNDEBUG -msimd128 -pthread \
   -s EXPORTED_RUNTIME_METHODS='HEAPU8' \
   -s MODULARIZE=1 \
   -s EXPORT_NAME="createWebRandomX" \
-  -s ENVIRONMENT='worker' \
+  -s ENVIRONMENT="${RX_ENVIRONMENT:-worker}" \
   -s WASM_BIGINT=1 \
   -s ABORTING_MALLOC=0 \
   -s NO_EXIT_RUNTIME=1 \

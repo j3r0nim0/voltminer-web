@@ -107,6 +107,7 @@ check_mirror() { # $1 = source under third_party/, $2 = published under transpar
 }
 check_mirror third_party/RandomX-JIT-overlay transparency/wasm-patch
 check_mirror third_party/WebRandomX-overlay transparency/wasm-patch-webrandomx
+check_mirror third_party/WebRandomX-JIT-overlay transparency/wasm-patch-jit
 
 # ── 3. hashes describe exactly what step 4 will push ────────────────────────
 say "3. regenerate published hashes"

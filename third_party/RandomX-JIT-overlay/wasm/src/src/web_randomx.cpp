@@ -17,15 +17,25 @@
 
 #define HASH_SIZE 32
 #define NONCE_OFFSET 39
-#define MAX_THREADS 8
+#define MAX_THREADS 32   /* cap of 32 pthreads: enough for any desktop/workstation,
+                            and the pool expression sizes to the machine (<=32) */
 
 typedef struct rx_state {
   char rs_hash[HASH_SIZE];
   uint64_t rs_height;
   randomx_cache *rs_cache;
+  /* rs_ready distinguishes "this slot holds the cache for rs_hash" from
+     "rs_hash/rs_height are just the zero-initialised struct". Without it a
+     request for (seedheight = 0, seedhash = 32 x 0x00) matched the fresh
+     state on the FIRST call, randomx_init_cache() was skipped, and the hash
+     ran against a malloc'd-but-never-filled 256 MiB cache -- a value that
+     moves with the heap layout rather than depending on the seed. The engine's
+     own randomx_init_cache() short-circuits on an unchanged, initialised key,
+     so this costs nothing after call one. Same fix as the port's shim. */
+  int rs_ready;
 } rx_state;
 
-static rx_state rx_s[2] = {{{0}, 0, 0}, {{0}, 0, 0}};
+static rx_state rx_s[2] = {{{0}, 0, 0, 0}, {{0}, 0, 0, 0}};
 static randomx_vm *rx_vms[MAX_THREADS];
 static int rx_vm_count = 0;
 static int rx_full_mem = 0;
@@ -189,10 +199,11 @@ static randomx_cache *cache_for(const uint64_t mainheight, const uint64_t seedhe
     }
     if (rx_sp->rs_cache == NULL) return NULL;
   }
-  if (rx_sp->rs_height != seedheight || memcmp(seedhash, rx_sp->rs_hash, HASH_SIZE)) {
+  if (!rx_sp->rs_ready || rx_sp->rs_height != seedheight || memcmp(seedhash, rx_sp->rs_hash, HASH_SIZE)) {
     randomx_init_cache(rx_sp->rs_cache, seedhash, HASH_SIZE);
     rx_sp->rs_height = seedheight;
     memcpy(rx_sp->rs_hash, seedhash, HASH_SIZE);
+    rx_sp->rs_ready = 1;
     destroy_all_vms();
   }
   return rx_sp->rs_cache;

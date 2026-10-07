@@ -167,11 +167,22 @@ function bindHeap() {
   rx.found = new Int32Array(buf, rx.foundPtr, 1);
 }
 
-/* The RandomX v1 reference vector: seed = 32 zero bytes, blob = 76 zero bytes
-   with nonce 01000000 little-endian at byte 39. The same vector diag.html
-   checks, and the same hash the shipped build produces. Returns '' when the
-   engine agrees with the network, else why it does not. */
-const REFERENCE_HASH = '30aed56ecfba3f935eb906a633c3c412bb5361175bb3dda93070f08615c45c6f';
+/* RandomX v1 known-answer test: seed = 32 zero bytes, blob = 76 zero bytes with
+   nonce 01000000 little-endian at byte 39, hashed at height 1 (heights 0..2112
+   all use the zero seed on Monero, so this is a call the miner really makes).
+   086a612e...5f3 is what RandomX v1 returns for it: the wasm interpreter and the
+   wasm JIT agree, and the same value comes out of the WebRandomX and bonanza
+   builds, cross-checked against tevador's official test vector.
+
+   Height 1, NOT 0 -- that is load-bearing. A shim that skips
+   randomx_init_cache() when the request matches its zero-initialised cache
+   state hashes a malloc'd-but-never-filled 256 MiB cache and returns a value
+   that moves with the heap layout: that is what 30aed56e...c45c6f was (and
+   MAX_THREADS 8 -> 32 turned it into 2f31bdb9...). A non-zero height forces the
+   cache to be built, so this stays a real test of Argon2 + SuperscalarHash +
+   hashing on every engine we ship. Do not "simplify" the call back to (0n, 0n).
+   Returns '' when the engine hashes the vector correctly, else why it does not. */
+const REFERENCE_HASH = '086a612e65232b12f9f5bc5e1c36b1215c51273f46a9a96e70a9d35a150645f3';
 function referenceVectorFailure() {
   try {
     const m = rx.module;
@@ -180,7 +191,7 @@ function referenceVectorFailure() {
     const blob = new Uint8Array(m.HEAPU8.buffer, blobPtr, 76);
     blob.fill(0);
     blob[39] = 1;
-    const ok = m._randomx_hash(0n, 0n, seedPtr, blobPtr, 76, hashPtr);
+    const ok = m._randomx_hash(1n, 1n, seedPtr, blobPtr, 76, hashPtr);
     const got = [...new Uint8Array(m.HEAPU8.buffer, hashPtr, 32)]
       .map((b) => b.toString(16).padStart(2, '0')).join('');
     try { m._free(seedPtr); m._free(blobPtr); m._free(hashPtr); } catch { /* ignore */ }
@@ -220,7 +231,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=64', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=68', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -737,7 +748,7 @@ onmessage = function (e) {
     fullDataset = data.fullDataset === true;
   }
   if (data.type === 'threads') {
-    cpuThreads = Math.max(1, Math.min(4, data.n | 0 || 1));
+    cpuThreads = Math.max(1, Math.min(32, data.n | 0 || 1));
     if (rx && typeof rx.setThreads === 'function') rx.setThreads(cpuThreads);
     postMessage({ type: 'status', message: `C++ threads set to ${cpuThreads} (shared dataset).` });
   }

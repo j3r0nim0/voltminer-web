@@ -1,0 +1,20 @@
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const JS = process.env.RX_JS, WASM = process.env.RX_WASM;
+const m = await require(JS)({ wasmBinary: fs.readFileSync(WASM), locateFile: p => p.endsWith('.wasm') ? WASM : p, mainScriptUrlOrBlob: JS });
+const seedPtr = m._malloc(32);
+for (let i = 0; i < 32; i++) m.HEAPU8[seedPtr + i] = (i * 7 + 1) & 0xff;   // real seed
+const blobPtr = m._malloc(76); m.HEAPU8.fill(0, blobPtr, blobPtr + 76); m.HEAPU8[blobPtr + 39] = 1;
+const tp = m._malloc(8); m.HEAPU8.fill(0, tp, tp + 8);
+const fp = m._malloc(4), np = m._malloc(4), hp = m._malloc(32);
+m._rxSetJitEnabled(1);
+if (m._rxjit_set_use_threaded_interp) m._rxjit_set_use_threaded_interp(1);
+if (m._rxjit_set_regs_in_memory) m._rxjit_set_regs_in_memory(1);
+if (m._rxjit_set_split_inner_dispatch) m._rxjit_set_split_inner_dispatch(1);
+const n = Number(process.env.RX_THREADS || 1);
+m._randomx_set_threads(n);
+const batch = 128, t = Date.now();
+const done = m._randomx_mine(1n, 1n, seedPtr, blobPtr, 76, 1, batch, tp, 8, fp, np, hp);
+const el = (Date.now() - t) / 1000;
+console.log(`${(process.env.RX_TAG||'').padEnd(20)} threads=${m._randomx_get_threads()} ${done} hashes ${el.toFixed(2)}s = ${(done/el).toFixed(1)} H/s  | jit runs=${m._rxjit_stat_runs()} light=${m._rxjit_stat_light_runs()} fails=${m._rxjit_stat_fails()}`);

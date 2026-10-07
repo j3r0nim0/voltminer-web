@@ -81,8 +81,14 @@ export function isValidWallet(address) {
   return new RegExp(`^(?:[48]${b58}{94}|4${b58}{105})$`).test(s);
 }
 
-/** Largest C++ thread count the slider and the client allow (shared dataset). */
-export const MAX_THREADS = 4;
+/** Largest C++ thread count the slider and the client allow (shared dataset).
+    Matches the wasm shim's MAX_THREADS. 32 covers any desktop/workstation; the
+    wasm clamps to the same number, so a higher slider value would be a no-op. */
+export const MAX_THREADS = 32;
+
+/** The thread slider works in percent of cores, not a raw count. */
+export const THREAD_PERCENTS = [25, 50, 75, 100];
+const DEFAULT_THREAD_PERCENT = 50;
 
 export function hardwareThreads() {
   const n = Number(navigator.hardwareConcurrency) || 4;
@@ -104,21 +110,30 @@ export function isIOS() {
   return false;
 }
 
-export function defaultThreadCount() {
-  // Bonanza's optimizeArm rule (BACKLOG A3). navigator.hardwareConcurrency
-  // includes efficiency cores on big.LITTLE / Apple silicon, and extra
-  // full-dataset threads contend for memory bandwidth — measured, 4 -> 8
-  // workers gained only ~19% while per-worker fell ~40%. Count half, about the
-  // performance cores, then cap at the shared ceiling (4). The slider still
-  // reaches the ceiling, so this is a starting point, not a limit. The old
-  // value was a flat 2 on any machine with >= 4 cores, which left most laptops
-  // and desktops at half what they can use.
+/** Effective C++ threads for a percent-of-cores choice. The slider is in
+    percent (25/50/75/100 of navigator.hardwareConcurrency) because the raw core
+    count is machine-specific: 50% is roughly the performance cores on
+    big.LITTLE / Apple silicon, and it lands on a sensible count everywhere.
+    Capped at MAX_THREADS. Whatever the percent, an origin that cannot share
+    the dataset — or any iOS browser — runs a single thread. */
+export function threadsForPercent(percent) {
   if (!canShareDataset()) return 1;
   // iOS gets one thread whatever it reports. It refuses the ~2 GB fast dataset
   // and reclaims Wasm memory aggressively when the app is backgrounded, so the
   // extra pthreads buy nothing and cost stability on a phone.
   if (isIOS()) return 1;
-  return Math.max(1, Math.min(MAX_THREADS, Math.floor(hardwareThreads() / 2)));
+  const pct = Math.max(1, Math.min(100, Number(percent) || DEFAULT_THREAD_PERCENT));
+  return Math.max(1, Math.min(MAX_THREADS, Math.round((pct / 100) * hardwareThreads())));
+}
+
+/** Starting slider position: 50% (≈ the performance cores — the same value the
+    old fixed default of min(4, cores/2) gave on an 8-core machine). Bonanza's
+    optimizeArm rule (BACKLOG A3): hardwareConcurrency counts efficiency cores,
+    and extra full-dataset threads contend for memory bandwidth, so half the
+    reported cores is a good starting point — not a limit. */
+export function defaultThreadPercent() {
+  if (!canShareDataset() || isIOS()) return 25;
+  return DEFAULT_THREAD_PERCENT;
 }
 
 export function loadOrCreateWorkerId() {
@@ -557,7 +572,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=64', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=68', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');

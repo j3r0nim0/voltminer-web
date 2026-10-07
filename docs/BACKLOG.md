@@ -235,7 +235,7 @@ in our overlay. Compiles and links with **zero source changes to the shim**, and
 our pinned vector exactly:
 
 ```
-_randomx_hash(0n, 0n, seedPtr, blobPtr, 76, hashPtr)   ->  30aed56e...c45c6f   MATCH
+_randomx_hash(1n, 1n, seedPtr, blobPtr, 76, hashPtr)   ->  086a612e...5f3   MATCH   (see D3)
 ```
 
 That retires the port's biggest risk. We expected our API surface (`_randomx_hash`,
@@ -245,7 +245,7 @@ to meet theirs. It does, so no shim rewrite.
 **Then the flag test, and it fails.**
 
 ```
-their flags (-O3 -flto -DNDEBUG -msimd128 -pthread)   ->  30aed56e...c45c6f   MATCH
+their flags (-O3 -flto -DNDEBUG -msimd128 -pthread)   ->  086a612e...5f3   MATCH   (re-run 2026-10-07, see D3)
 same build + -ffast-math (what OUR CMakeLists uses)   ->  cd821fa2...afcc9e   MISMATCH
 ```
 
@@ -271,9 +271,10 @@ full-memory program). RandomX guarantees full and light agree for the same input
 mode is a self-contained reference:
 
 ```
-light mode:  30aed56e...c45c6f   ok=1   84ms
+light mode:  086a612e...5f3        ok=1   ~700ms   (2026-10-07: with the cache really built; the
+                                            old 30aed56e/84ms was the uninitialised-cache path, D3)
 dataset:     began=1  percent=100  items=34078719  init=4132ms
-full mode:   30aed56e...c45c6f   ok=1
+full mode:   086a612e...5f3        ok=1
 MATCH
 ```
 
@@ -527,6 +528,46 @@ touched again — their design has no shared mutable state to clobber.
 result isn't the hash of the nonce it reported. That is the guard that turns this entire
 class of bug from *"every share silently rejected"* into a visible, loud drop. Do not remove
 it when touching the worker.
+
+### D3. 2026-10-07 — `30aed56e` was never the vector's hash: the shim hashed an uninitialised cache
+
+Both shipped shims (`RandomX-JIT-overlay`/bonanza and `WebRandomX-overlay`/single-thread)
+decided whether to call `randomx_init_cache()` by comparing the request against `rx_s[slot]`,
+which starts life as `{hash = 32 x 0x00, height = 0}`. The reference vector *is*
+`(mainheight 0, seedheight 0, seed 32 x 0x00)`, so the comparison matched on the **first** call,
+`randomx_init_cache()` was skipped, and every hash of that vector ran against a `malloc`'d but
+never-filled 256 MiB cache. The value was a function of whatever bytes the allocator handed out.
+
+* `30aed56e...c45c6f` is that value in the 8-thread layout. The same source built with
+  `MAX_THREADS 32` returns `2f31bdb9...` — that is what "raising MAX_THREADS 8 -> 32 makes the
+  hash wrong" was. Not the JIT, not the core, not the thread count.
+* Proof, same objects: fill a 256 MiB block with `0xAA`, free it and let the cache allocation
+  reuse it -> `1eba1c1e...`; with `0x5A` -> `e3dee3a2...`. Build the cache (`seedheight = 1`)
+  and the value is `086a612e...5f3` whatever the layout, pool size or heap contents are.
+* `086a612e...5f3` is the real RandomX v1 hash of the vector: wasm interpreter and wasm JIT
+  agree, both engines agree, and the same build reproduces tevador's official vector
+  (`8a48e5f9...b7c9`, in both modes).
+* **What was public-facing:** the load-time self-test compared against a constant that no
+  RandomX implementation defines, so it could not catch a wrong hashing function — exactly what
+  D2 and A5 added it for. `diag.html` printed that constant to users as "expected hash".
+  Real mining was never affected: production calls pass `(height, height)` with the real seed, so
+  `randomx_init_cache()` always ran (only heights <= 2112 use the zero seed).
+* **Fixed 2026-10-07:** `rs_ready` in the shim (the first call on a slot always initialises; the
+  engine's own `randomx_init_cache()` short-circuits an unchanged key afterwards), and the
+  self-test now hashes **at height 1** and expects `086a612e...5f3`, which makes it a real
+  Argon2 + SuperscalarHash + hash test on every engine we ship. Shipped as `?v=67`.
+  The single-thread `js/vendor/randomx/web-randomx.wasm` binary still carries the latent bug
+  (harmless in production, same reasoning); the port's single-thread build replaces it.
+* **Numbers measured on the zero-seed vector before this date are not comparable:** A5's
+  "full mode ... init=4132ms" was 4.1 s for 2.03 GiB because the superscalar programs were
+  empty — a real cache takes ~100 s on the same machine — and the browser diag "MATCH" above it
+  was the same artifact. Benchmarks that used a real seed (the 3-minute runs, `bench-full.mjs`)
+  are unaffected, and the "dataset init takes 1.47 s with the zero seed but 107 s with a pattern
+  seed" reading was this bug, not seed complexity.
+* **Open:** A5's "same build + `-ffast-math` -> `cd821fa2` MISMATCH" was measured on the same
+  uninitialised path, so it may be a layout difference rather than a miscompile. The port builds
+  its core *with* `-ffast-math` and still passes the official vector, so re-run that test before
+  repeating the "REQUIRES dropping -ffast-math" conclusion.
 
 ---
 

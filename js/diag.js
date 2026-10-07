@@ -3,9 +3,9 @@
    mine and sends nothing anywhere. Classic script: no module, eval or Function. */
 (() => {
   'use strict';
-  const VERSION = 'diag v64';
+  const VERSION = 'diag v68';
   const WASM_DIR = 'js/vendor/randomx/';
-  const EXPECTED = '30aed56ecfba3f935eb906a633c3c412bb5361175bb3dda93070f08615c45c6f';
+  const EXPECTED = '086a612e65232b12f9f5bc5e1c36b1215c51273f46a9a96e70a9d35a150645f3';
   // Minimal wasm () -> i32 whose body uses v128; node v22 WebAssembly.validate === true.
   const SIMD_BYTES = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 127, 3, 2, 1, 0, 10, 25, 1, 23, 0,
     253, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 65, 0, 11];
@@ -162,15 +162,19 @@
     window.createWebRandomX = undefined;
     if (typeof factory !== 'function') throw new Error('the glue did not export a factory');
     const module = await factory({
-      locateFile: (p) => new URL(WASM_DIR + p.split('/').pop() + '?v=64', base).href,
+      locateFile: (p) => new URL(WASM_DIR + p.split('/').pop() + '?v=68', base).href,
       mainScriptUrlOrBlob: url,
     });
     if (!module || typeof module._randomx_hash !== 'function') throw new Error('_randomx_hash was not exported');
     moduleCache[url] = module;
     return module;
   }
-  /* Same calling convention as js/miner-worker.js: _randomx_hash(0n, 0n,
-     seedPtr, blobPtr, len, hashPtr), light/cache mode against a fresh cache. */
+  /* Same calling convention and the same vector as js/miner-worker.js:
+     _randomx_hash(1n, 1n, seedPtr, blobPtr, len, hashPtr), light/cache mode.
+     Height 1, not 0, so the engine has to build the 256 MiB cache: with (0n, 0n)
+     an engine that skips randomx_init_cache() on a matching first request hashes
+     uninitialised memory and this test measures the heap layout instead of the
+     seed (see the note in js/miner-worker.js). */
   async function hashModule(module) {
     const seedPtr = module._malloc(32);
     const blobPtr = module._malloc(256);
@@ -180,7 +184,7 @@
     blob.fill(0);
     blob[39] = 1; // nonce 01000000 little-endian at byte 39
     const t0 = performance.now();
-    const ok = module._randomx_hash(0n, 0n, seedPtr, blobPtr, 76, hashPtr);
+    const ok = module._randomx_hash(1n, 1n, seedPtr, blobPtr, 76, hashPtr);
     const ms = Math.round(performance.now() - t0);
     const out = hex(new Uint8Array(module.HEAPU8.buffer, hashPtr, 32));
     try { module._free(seedPtr); module._free(blobPtr); module._free(hashPtr); } catch (e) { /* ignore */ }
@@ -212,9 +216,10 @@
     running = true;
     runBtn.disabled = true;
     hashStatus.textContent = 'hashing…';
-    const singleUrl = new URL(WASM_DIR + 'web-randomx.js?v=64', base).href;
-    const mtUrl = new URL(WASM_DIR + 'web-randomx-mt.js?v=64', base).href;
+    const singleUrl = new URL(WASM_DIR + 'web-randomx.js?v=68', base).href;
+    const mtUrl = new URL(WASM_DIR + 'web-randomx-mt.js?v=68', base).href;
     body['wasm reference vector'] = []; body['threads build'] = []; body['verdict'] = [];
+    push('wasm reference vector', 'height: 1 (genesis epoch, zero seed)');
     push('wasm reference vector', 'seed: 32 bytes of 0x00');
     push('wasm reference vector', 'blob: 76 bytes of 0x00, nonce 01000000 at byte 39');
     push('wasm reference vector', 'expected hash: ' + EXPECTED);

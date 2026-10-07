@@ -1,5 +1,5 @@
 diff --git a/wasm/build.sh b/wasm/build.sh
-index fc56ab7..8b1ec5e 100755
+index fc56ab7..21a58ac 100755
 --- a/wasm/build.sh
 +++ b/wasm/build.sh
 @@ -36,6 +36,7 @@ SOURCES=(
@@ -34,7 +34,7 @@ index fc56ab7..8b1ec5e 100755
    -s WASM=1 \
    -s USE_PTHREADS=1 \
 -  -s PTHREAD_POOL_SIZE=32 \
-+  -s PTHREAD_POOL_SIZE=8 \
++  -s 'PTHREAD_POOL_SIZE=Math.min(navigator.hardwareConcurrency||8,32)' \
 +  -s PTHREAD_POOL_SIZE_STRICT=0 \
 +  -s STACK_SIZE=1048576 \
 +  -s DEFAULT_PTHREAD_STACK_SIZE=1048576 \
@@ -47,7 +47,7 @@ index fc56ab7..8b1ec5e 100755
 -  -s EXPORT_NAME="createRandomX" \
 -  -s ENVIRONMENT='web,worker,node' \
 +  -s EXPORT_NAME="createWebRandomX" \
-+  -s ENVIRONMENT='worker' \
++  -s ENVIRONMENT="${RX_ENVIRONMENT:-worker}" \
 +  -s WASM_BIGINT=1 \
 +  -s ABORTING_MALLOC=0 \
    -s NO_EXIT_RUNTIME=1 \
@@ -67,10 +67,10 @@ index fc56ab7..8b1ec5e 100755
  fi
 diff --git a/wasm/src/src/web_randomx.cpp b/wasm/src/src/web_randomx.cpp
 new file mode 100644
-index 0000000..9ecaea1
+index 0000000..73f15d2
 --- /dev/null
 +++ b/wasm/src/src/web_randomx.cpp
-@@ -0,0 +1,553 @@
+@@ -0,0 +1,576 @@
 +#include <stddef.h>
 +#include <stdint.h>
 +#include <string.h>
@@ -78,6 +78,10 @@ index 0000000..9ecaea1
 +#include <limits.h>
 +
 +#include "randomx.h"
++/* For RANDOMX_PROGRAM_SIZE_V2, which is how light_flags() below detects a core
++   that knows about RandomX v2. randomx.h does not pull configuration.h in, so
++   without this include that test is silently false and the guard never exists. */
++#include "configuration.h"
 +#include "web_randomx.h"
 +
 +#if defined(__EMSCRIPTEN_PTHREADS__)
@@ -86,15 +90,25 @@ index 0000000..9ecaea1
 +
 +#define HASH_SIZE 32
 +#define NONCE_OFFSET 39
-+#define MAX_THREADS 8
++#define MAX_THREADS 32   /* cap of 32 pthreads: enough for any desktop/workstation,
++                            and the pool expression sizes to the machine (<=32) */
 +
 +typedef struct rx_state {
 +  char rs_hash[HASH_SIZE];
 +  uint64_t rs_height;
 +  randomx_cache *rs_cache;
++  /* rs_ready distinguishes "this slot holds the cache for rs_hash" from
++     "rs_hash/rs_height are just the zero-initialised struct". Without it a
++     request for (seedheight = 0, seedhash = 32 x 0x00) matched the fresh
++     state on the FIRST call, randomx_init_cache() was skipped, and the hash
++     ran against a malloc'd-but-never-filled 256 MiB cache -- a value that
++     moves with the heap layout rather than depending on the seed. The engine's
++     own randomx_init_cache() short-circuits on an unchanged, initialised key,
++     so this costs nothing after call one. Same fix as the port's shim. */
++  int rs_ready;
 +} rx_state;
 +
-+static rx_state rx_s[2] = {{{0}, 0, 0}, {{0}, 0, 0}};
++static rx_state rx_s[2] = {{{0}, 0, 0, 0}, {{0}, 0, 0, 0}};
 +static randomx_vm *rx_vms[MAX_THREADS];
 +static int rx_vm_count = 0;
 +static int rx_full_mem = 0;
@@ -218,6 +232,14 @@ index 0000000..9ecaea1
 +  randomx_flags flags = randomx_flags(enabled_flags() & ~disabled_flags());
 +  flags = randomx_flags(flags & ~RANDOMX_FLAG_LARGE_PAGES);
 +  flags = randomx_flags(flags & ~RANDOMX_FLAG_FULL_MEM);
++#ifdef RANDOMX_PROGRAM_SIZE_V2
++  /* Never v2. The network still runs rx/0 v1 (program size 256) and a v2 hash
++     is a different function, so every share would be rejected by the pool while
++     the miner reported a healthy hashrate. The bit comes from
++     randomx_get_flags(), which is the core's to change, so strip it explicitly
++     instead of trusting upstream to keep leaving it clear. */
++  flags = randomx_flags(flags & ~RANDOMX_FLAG_V2);
++#endif
 +  return flags;
 +}
 +
@@ -250,10 +272,11 @@ index 0000000..9ecaea1
 +    }
 +    if (rx_sp->rs_cache == NULL) return NULL;
 +  }
-+  if (rx_sp->rs_height != seedheight || memcmp(seedhash, rx_sp->rs_hash, HASH_SIZE)) {
++  if (!rx_sp->rs_ready || rx_sp->rs_height != seedheight || memcmp(seedhash, rx_sp->rs_hash, HASH_SIZE)) {
 +    randomx_init_cache(rx_sp->rs_cache, seedhash, HASH_SIZE);
 +    rx_sp->rs_height = seedheight;
 +    memcpy(rx_sp->rs_hash, seedhash, HASH_SIZE);
++    rx_sp->rs_ready = 1;
 +    destroy_all_vms();
 +  }
 +  return rx_sp->rs_cache;

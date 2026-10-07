@@ -2,12 +2,12 @@ import {
   MinerClient,
   isValidWallet,
   defaultBridgeUrl,
-  defaultThreadCount,
+  defaultThreadPercent,
+  threadsForPercent,
   canShareDataset,
   hardwareThreads,
-  MAX_THREADS,
   loadOrCreateWorkerId,
-} from './miner-client.js?v=64';
+} from './miner-client.js?v=68';
 
 const $ = (id) => document.getElementById(id);
 
@@ -34,21 +34,20 @@ if ($('js-gate')) $('js-gate').hidden = true;
 
 const workerId = loadOrCreateWorkerId();
 
-if (canShareDataset()) {
-  const max = Math.max(1, Math.min(MAX_THREADS, hardwareThreads()));
-  const def = defaultThreadCount();
-  threadsEl.max = String(max);
-  threadsEl.value = String(def);
-  threadsEl.disabled = false;
-  threadsMax.textContent = `(${max} C++ threads — shared dataset only with Fast mode)`;
-  threadsVal.textContent = String(def);
-} else {
-  threadsEl.max = '1';
-  threadsEl.value = '1';
-  threadsEl.disabled = true;
-  threadsMax.textContent = '(one Wasm worker — this origin cannot share the dataset)';
-  threadsVal.textContent = '1';
+/* The slider is a percent of cores (index.html: min=25 max=100 step=25). The
+   label spells out the effective C++ thread count so "50%" is not a mystery. */
+function updateThreadsLabel(percent) {
+  const pct = Number(percent) || defaultThreadPercent();
+  threadsVal.textContent = `${pct}%`;
+  threadsMax.textContent = canShareDataset()
+    ? `(${threadsForPercent(pct)} of ${hardwareThreads()} C++ threads — shared dataset only with Fast mode)`
+    : '(one Wasm worker — this origin cannot share the dataset)';
 }
+
+const defPct = defaultThreadPercent();
+threadsEl.value = String(defPct);
+threadsEl.disabled = !canShareDataset();
+updateThreadsLabel(defPct);
 $('st-wid').textContent = workerId;
 $('st-wid-inline').textContent = workerId;
 
@@ -65,8 +64,9 @@ try {
 } catch (_) { /* ignore */ }
 
 threadsEl.addEventListener('input', () => {
-  threadsVal.textContent = threadsEl.value;
-  if (client.wantRun) client.setThreads(Number(threadsEl.value));
+  const pct = Number(threadsEl.value);
+  updateThreadsLabel(pct);
+  if (client.wantRun) client.setThreads(threadsForPercent(pct));
 });
 
 let filling = false;
@@ -264,7 +264,7 @@ function startMining() {
     client.start({
       wallet,
       password: workerId,
-      threads: Number(threadsEl.value),
+      threads: threadsForPercent(Number(threadsEl.value)),
       throttle: 0,
       // ~2.5 GB fast dataset is opt-in; light/cache is the default.
       fullDataset: !!(fullDatasetEl && fullDatasetEl.checked),
