@@ -254,6 +254,8 @@ soft-rounding fallbacks guarded by `err == 0.0` and rounding-mode comparisons �
 constructs fast-math is permitted to delete. So:
 
 * **Adopting their engine REQUIRES dropping `-ffast-math`** in `CMakeLists.txt`, where it is
+  (STRUCK 2026-10-07 — see D3: that mismatch was the uninitialised cache path, and the shipped
+  port build has `-ffast-math` on with 75 pool-accepted shares behind it)
   currently on every RandomX source.
 * The failure mode is the one this project already paid for: a miner that runs happily,
   reports a healthy hashrate, and gets **every share rejected**. Dropping their JIT files into
@@ -564,10 +566,28 @@ never-filled 256 MiB cache. The value was a function of whatever bytes the alloc
   was the same artifact. Benchmarks that used a real seed (the 3-minute runs, `bench-full.mjs`)
   are unaffected, and the "dataset init takes 1.47 s with the zero seed but 107 s with a pattern
   seed" reading was this bug, not seed complexity.
-* **Open:** A5's "same build + `-ffast-math` -> `cd821fa2` MISMATCH" was measured on the same
-  uninitialised path, so it may be a layout difference rather than a miscompile. The port builds
-  its core *with* `-ffast-math` and still passes the official vector, so re-run that test before
-  repeating the "REQUIRES dropping -ffast-math" conclusion.
+* **Closed the same day:** A5's "same build + `-ffast-math` -> `cd821fa2` MISMATCH" was measured
+  on that same uninitialised path, so it was a layout difference, not a miscompile. Measured
+  properly: the port (built *with* `-ffast-math`) and the bonanza build (without it) return
+  identical hashes for 5 seeds x 5 epochs — the epoch walk also flips the cache slot —
+  interpreter and JIT, and the port reproduces tevador's official vector in both modes. **A5's
+  "REQUIRES dropping `-ffast-math`" is struck.**
+* **45-minute browser soak of the swapped engine, MT + Fast mode (dataset), `?v=68`:** stable,
+  **75 shares accepted** by MoneroOcean, no dropped shares, no self-test failure. That is the
+  spec check we cannot fake — the pool re-hashed those nonces with real RandomX v1 and the real
+  epoch seed — so the bonanza -> WebRandomX+JIT core swap is validated in production, together
+  with the growable-memory model (the fixed 3.5 GiB heap used to page a 16 GiB machine to death
+  in light mode) under a real ~2 GB dataset.
+* **Single-thread (no shared dataset) findings, 2026-10-07:** the ST engine *can* build the
+  dataset — `randomx_dataset_begin` -> 100% in 407 s serial, 130 steps, `is_full_mem=1`, and the
+  canonical hash still matches in full mode — but full mode is **slower** on one thread:
+  **20.9 H/s vs ~28-35 H/s light.** One thread cannot hide a DRAM round-trip per dataset access,
+  while light-mode items are computed in a small working set. So the client gate
+  (`fullDataset = canShareDataset() && ...`) is correct as it stands, and **A4's premise is
+  inverted: the no-SAB lever is worker count, not the dataset.** The shape is N independent
+  light-mode workers, each with its own ~256 MB cache and its own random nonce base (no SAB
+  needed); prototype on branch `st-workers` (cap 4, iOS pinned to 1), unbenchmarked. Context:
+  that path went from **3.6 H/s** (v67, interpreter only) to **~28-35 H/s** (v68, JIT) — 8-10x.
 
 ---
 
@@ -635,6 +655,9 @@ of the port are done.
   after the build gives a silent 404 and `Aborted(both async and sync fetching of the wasm
   failed)`. Fix in the build (`-o`), never by renaming.
 * **`-ffast-math` must stay off.** With it the engine returns `ok=1` and a wrong hash.
+  (STRUCK 2026-10-07 — see D3: the sample was taken on an uninitialised cache; with a real
+  cache the fast-math build and the non-fast-math build agree on every seed tried, and the
+  shipped v68 port engine runs with `-ffast-math` and mines acceped shares.)
 * **The soak's FINAL tally counters read 0** (`submits/accepted/rejected`) — broken since the
   log format changed. The authoritative lines are `submit … local=ok` and `accepted  total=N`,
   plus `ok=N` in the UI.
