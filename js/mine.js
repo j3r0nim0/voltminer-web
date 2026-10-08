@@ -415,4 +415,9 @@ refreshStorage();
 initBattery();
 // Show the relay endpoint before Start too — it is a known value, so there is
 // no reason to make anyone press a button to see where their shares go.
+// ...and in a place that is visible before Start: the stats panel is hidden until
+// the first Start, so the row above it was written but never read by anyone who
+// had not pressed the button yet.
 if (trRelay) trRelay.textContent = defaultBridgeUrl();
+const trRelayPre = document.getElementById('tr-relay-pre');
+if (trRelayPre) trRelayPre.textContent = defaultBridgeUrl();
