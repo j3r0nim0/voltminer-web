@@ -236,6 +236,13 @@ export class MinerClient {
     this.bridgeUrl = url;
     this.lastWorkerAt = Date.now();
     this.#spawnWorkers(1);
+    // The Fast-mode opt-in is latched per start. Workers survive stop() (paused, not
+    // terminated) and {type:'config'} used to go out only in #addWorker — so toggling
+    // between runs was ignored unless the tab had never started, i.e. the checkbox
+    // looked dead. Push the current value before the job goes out.
+    for (const wrk of this.workers) {
+      try { wrk.postMessage({ type: 'config', fullDataset: this.fullDataset }); } catch { /* ignore */ }
+    }
     this.#connect();
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = setInterval(() => {
@@ -572,7 +579,7 @@ export class MinerClient {
   }
 
   #addWorker() {
-    const wrk = new Worker(new URL('./miner-worker.js?v=68', import.meta.url));
+    const wrk = new Worker(new URL('./miner-worker.js?v=69', import.meta.url));
     wrk.onmessage = (e) => this.#onWorkerMsg(wrk, e.data);
     wrk.onerror = (ev) => {
       const msg = String(ev.message || ev.error || '');

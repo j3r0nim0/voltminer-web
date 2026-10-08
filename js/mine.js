@@ -7,7 +7,7 @@ import {
   canShareDataset,
   hardwareThreads,
   loadOrCreateWorkerId,
-} from './miner-client.js?v=68';
+} from './miner-client.js?v=69';
 
 const $ = (id) => document.getElementById(id);
 
@@ -216,6 +216,9 @@ function setRunningUI(running) {
   stopBtn.disabled = !running;
   walletEl.disabled = running;
   consentEl.disabled = running;
+  // The dataset is a start-time decision (~6 min fill, ~2.5 GB), so the opt-in is not
+  // live-switchable: disable it while running rather than let it look togglable.
+  if (fullDatasetEl) fullDatasetEl.disabled = running;
   stopBtn.classList.toggle('danger', running);
 }
 
