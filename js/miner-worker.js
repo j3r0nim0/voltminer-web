@@ -231,7 +231,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=69', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=70', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -745,7 +745,19 @@ function loop() {
 onmessage = function (e) {
   const data = e.data || {};
   if (data.type === 'config') {
-    fullDataset = data.fullDataset === true;
+    const want = data.fullDataset === true;
+    if (want !== fullDataset) {
+      fullDataset = want;
+      // The opt-in is a per-start decision, but this worker outlives stop() (paused,
+      // not terminated). The decision is taken inside `if (!lightReady)` -- a
+      // once-per-worker latch -- so resetting dsPhase alone would not re-decide it.
+      // Clear both, so the next loop iteration re-evaluates the opt-in. Never while
+      // a build/save is in flight.
+      if (dsPhase === 'skip' || dsPhase === 'idle') {
+        dsPhase = 'idle';
+        lightReady = false;
+      }
+    }
   }
   if (data.type === 'threads') {
     cpuThreads = Math.max(1, Math.min(32, data.n | 0 || 1));

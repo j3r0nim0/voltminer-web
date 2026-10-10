@@ -7,7 +7,7 @@ import {
   canShareDataset,
   hardwareThreads,
   loadOrCreateWorkerId,
-} from './miner-client.js?v=69';
+} from './miner-client.js?v=70';
 
 const $ = (id) => document.getElementById(id);
 
