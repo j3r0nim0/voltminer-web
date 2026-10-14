@@ -23,7 +23,8 @@ directly are left to provide here.
 
 #include <cstdint>
 
-extern "C" int g_rx_aes_simd = 0;
-extern "C" int g_rx_aes_relaxed = 0;
+// g_rx_aes_simd and g_rx_aes_relaxed are defined in soft_aes.cpp
+// extern "C" int g_rx_aes_simd = 0;
+// extern "C" int g_rx_aes_relaxed = 0;
 
 __thread uint32_t wasm_rounding_mode = 0;
