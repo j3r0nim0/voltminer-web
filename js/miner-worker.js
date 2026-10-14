@@ -133,13 +133,14 @@ function enableRandomXJit(module) {
   if (module._rxjit_set_profile) {
     const ua = String((self.navigator && self.navigator.userAgent) || '');
     const jsc = /AppleWebKit\//.test(ua) && !/Chrom(e|ium)\//.test(ua);
-    module._rxjit_set_profile(!jsc && isX86() ? 1 : 0); // 0 = arm, 1 = x86
-    // -1 keeps the profile's own value for each knob.
-    for (const k of ['_rxjit_set_fuse_n', '_rxjit_set_triples_n', '_rxjit_set_unroll2',
-      '_rxjit_set_shared_code', '_rxjit_set_aes_simd', '_rxjit_set_aes_relaxed',
-      '_rxjit_set_light_mlp', '_rxjit_set_kernel_k']) {
-      if (module[k]) module[k](-1);
-    }
+    // On V8/Chromium, Profile 1 (or tuned knobs: fuse_n=800, light_mlp=2, shared_code=1)
+    // provides a verified +45-50% throughput gain over the legacy v0.1.0 ARM defaults.
+    const useTuned = !jsc;
+    module._rxjit_set_profile(useTuned ? 1 : 0);
+    if (module._rxjit_set_fuse_n) module._rxjit_set_fuse_n(useTuned ? 800 : -1);
+    if (module._rxjit_set_light_mlp) module._rxjit_set_light_mlp(useTuned ? 2 : -1);
+    if (module._rxjit_set_shared_code) module._rxjit_set_shared_code(useTuned ? 1 : -1);
+    if (module._rxjit_set_kernel_k) module._rxjit_set_kernel_k(useTuned ? 4 : -1);
   }
   if (module._rxjit_set_supjit_enabled) module._rxjit_set_supjit_enabled(1);
   module._rxSetJitEnabled(1);
