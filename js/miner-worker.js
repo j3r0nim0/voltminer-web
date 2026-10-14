@@ -133,15 +133,16 @@ function enableRandomXJit(module) {
   if (module._rxjit_set_profile) {
     const ua = String((self.navigator && self.navigator.userAgent) || '');
     const jsc = /AppleWebKit\//.test(ua) && !/Chrom(e|ium)\//.test(ua);
-    // On V8/Chromium, Profile 1 (or tuned knobs: fuse_n=800, light_mlp=2, shared_code=1)
-    // provides a verified +45-50% throughput gain over the legacy v0.1.0 ARM defaults.
-    const useTuned = !jsc;
-    module._rxjit_set_profile(useTuned ? 1 : 0);
-    if (module._rxjit_set_fuse_n) module._rxjit_set_fuse_n(useTuned ? 800 : -1);
-    if (module._rxjit_set_light_mlp) module._rxjit_set_light_mlp(useTuned ? 2 : -1);
-    if (module._rxjit_set_shared_code) module._rxjit_set_shared_code(useTuned ? 1 : -1);
-    if (module._rxjit_set_aes_simd) module._rxjit_set_aes_simd(useTuned ? 1 : -1);
-    if (module._rxjit_set_kernel_k) module._rxjit_set_kernel_k(useTuned ? 4 : -1);
+    // Tuning profile:
+    // Chromium/V8 gets Profile 1 (fuse_n=800, light_mlp=2, shared_code=1, aes_simd=1, kernel_k=4).
+    // Safari/JSC gets Profile 0 with tuned knobs (fuse_n=800, light_mlp=2, shared_code=0, aes_simd=0, kernel_k=4)
+    // which unlocks +60% light mode MLP while preserving fast L1 T-table AES.
+    module._rxjit_set_profile(jsc ? 0 : 1);
+    if (module._rxjit_set_fuse_n) module._rxjit_set_fuse_n(800);
+    if (module._rxjit_set_light_mlp) module._rxjit_set_light_mlp(2);
+    if (module._rxjit_set_shared_code) module._rxjit_set_shared_code(jsc ? 0 : 1);
+    if (module._rxjit_set_aes_simd) module._rxjit_set_aes_simd(jsc ? 0 : 1);
+    if (module._rxjit_set_kernel_k) module._rxjit_set_kernel_k(4);
   }
   if (typeof self !== 'undefined') self._rxjit_tier_probe_silent = true;
   if (module._rxjit_set_supjit_enabled) module._rxjit_set_supjit_enabled(1);
@@ -234,7 +235,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=73', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=74', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
