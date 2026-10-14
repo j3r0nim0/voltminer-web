@@ -1812,14 +1812,7 @@ static uint32_t emit_main_loop_body(uint32_t vm_state_ptr, uint32_t scratchpad_p
 		}
 
 		p += emit_step5_mx_xor(p);
-		// step 6: speculative prefetch of next iteration's dataset cache line in fast mode
-		if (!g_light_fn_len) {
-			LG(LOCT_ds_ptr);
-			LG(LOC_mx);
-			I32_ADD();
-			I64_LOAD_OFF(0);
-			WASM_U8(0x1a); // drop
-		}
+		// step 6: prefetch — wasm has no prefetch, skipped
 		p += emit_step7_dataset_xor(p);
 		p += emit_step8_swap_mx_ma(p);
 		p += emit_step9_store_r(scratchpad_ptr, p);
