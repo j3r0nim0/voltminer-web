@@ -1371,16 +1371,15 @@ static uint32_t emit_step2_xor_r(uint32_t scratchpad_ptr, uint8_t *buf) {
 	I32_ADD();
 	LS(LOC_tmp);
 	if (g_emit_regs_in_mem) {
-		for (int i = 0; i < 8; i++) {
-			// Stack: addr=0 (for store) ; sp[i] ; r[i] → xor → r[i]^sp[i]
-			//        i64.store pops (i32 addr, i64 value).
+		for (int i = 0; i < 4; i++) {
+			// Vectorized 128-bit XOR: 4 x 16 bytes = 64 bytes
 			ARENA_BASE();
 			LG(LOC_tmp);
-			I64_LOAD_OFF((uint32_t)(i * 8));
+			V128_LOAD_OFF((uint32_t)(i * 16));
 			ARENA_BASE();
-			I64_LOAD_OFF(g_r_file_base + (uint32_t)(i * 8));
-			I64_XOR();
-			I64_STORE_OFF(g_r_file_base + (uint32_t)(i * 8));
+			V128_LOAD_OFF(g_r_file_base + (uint32_t)(i * 16));
+			WASM_U8_THUNK({0xfd, 0x51}); // v128.xor
+			V128_STORE_OFF(g_r_file_base + (uint32_t)(i * 16));
 		}
 	} else {
 		for (int i = 0; i < 8; i++) {
@@ -1532,14 +1531,15 @@ static uint32_t emit_step7_dataset_xor(uint8_t *buf) {
 	}
 	LS(LOC_tmp);
 	if (g_emit_regs_in_mem) {
-		for (int i = 0; i < 8; i++) {
+		for (int i = 0; i < 4; i++) {
+			// Vectorized 128-bit XOR: 4 x 16 bytes = 64 bytes
 			ARENA_BASE();
 			LG(LOC_tmp);
-			I64_LOAD_OFF((uint32_t)(i * 8));
+			V128_LOAD_OFF((uint32_t)(i * 16));
 			ARENA_BASE();
-			I64_LOAD_OFF(g_r_file_base + (uint32_t)(i * 8));
-			I64_XOR();
-			I64_STORE_OFF(g_r_file_base + (uint32_t)(i * 8));
+			V128_LOAD_OFF(g_r_file_base + (uint32_t)(i * 16));
+			WASM_U8_THUNK({0xfd, 0x51}); // v128.xor
+			V128_STORE_OFF(g_r_file_base + (uint32_t)(i * 16));
 		}
 	} else {
 		for (int i = 0; i < 8; i++) {
@@ -1572,11 +1572,12 @@ static uint32_t emit_step9_store_r(uint32_t scratchpad_ptr, uint8_t *buf) {
 	I32_ADD();
 	LS(LOC_tmp);
 	if (g_emit_regs_in_mem) {
-		for (int i = 0; i < 8; i++) {
+		for (int i = 0; i < 4; i++) {
+			// Vectorized 128-bit store: 4 x 16 bytes = 64 bytes
 			LG(LOC_tmp);
 			ARENA_BASE();
-			I64_LOAD_OFF(g_r_file_base + (uint32_t)(i * 8));
-			I64_STORE_OFF((uint32_t)(i * 8));
+			V128_LOAD_OFF(g_r_file_base + (uint32_t)(i * 16));
+			V128_STORE_OFF((uint32_t)(i * 16));
 		}
 	} else {
 		for (int i = 0; i < 8; i++) {
@@ -1811,7 +1812,14 @@ static uint32_t emit_main_loop_body(uint32_t vm_state_ptr, uint32_t scratchpad_p
 		}
 
 		p += emit_step5_mx_xor(p);
-		// step 6: prefetch — wasm has no prefetch, skipped
+		// step 6: speculative prefetch of next iteration's dataset cache line in fast mode
+		if (!g_light_fn_len) {
+			LG(LOCT_ds_ptr);
+			LG(LOC_mx);
+			I32_ADD();
+			I64_LOAD_OFF(0);
+			WASM_U8(0x1a); // drop
+		}
 		p += emit_step7_dataset_xor(p);
 		p += emit_step8_swap_mx_ma(p);
 		p += emit_step9_store_r(scratchpad_ptr, p);

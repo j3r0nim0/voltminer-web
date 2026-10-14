@@ -140,7 +140,7 @@ function enableRandomXJit(module) {
     if (module._rxjit_set_fuse_n) module._rxjit_set_fuse_n(useTuned ? 800 : -1);
     if (module._rxjit_set_light_mlp) module._rxjit_set_light_mlp(useTuned ? 2 : -1);
     if (module._rxjit_set_shared_code) module._rxjit_set_shared_code(useTuned ? 1 : -1);
-    if (module._rxjit_set_aes_simd) module._rxjit_set_aes_simd(useTuned ? 1 : -1);
+    if (module._rxjit_set_aes_simd) module._rxjit_set_aes_simd(1);
     if (module._rxjit_set_kernel_k) module._rxjit_set_kernel_k(useTuned ? 4 : -1);
   }
   if (typeof self !== 'undefined') self._rxjit_tier_probe_silent = true;
