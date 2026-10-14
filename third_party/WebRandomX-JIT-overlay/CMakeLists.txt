@@ -32,6 +32,7 @@ project(WebRandomX)
 
 set(randomx_sources
 src/cpp/aes_hash.cpp
+src/cpp/soft_aes.cpp
 src/cpp/argon2_simd.c
 src/cpp/bytecode_machine.cpp
 src/cpp/dataset.cpp
@@ -142,7 +143,7 @@ if(ARM_ID STREQUAL "aarch64" OR ARM_ID STREQUAL "arm64" OR ARM_ID STREQUAL "armv
 endif()
 
 # WASM SIMD
-set_source_files_properties(${randomx_sources} COMPILE_FLAGS "-O3 -msimd128 -mrelaxed-simd -mrelaxed-simd -ffast-math")
+set_source_files_properties(${randomx_sources} COMPILE_FLAGS "-O3 -flto -msimd128 -mrelaxed-simd -ffast-math")
 
 set(RANDOMX_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src" CACHE STRING "WebRandomX Include path")
 
@@ -158,7 +159,7 @@ add_library(randomx-mt ${randomx_sources})
 set_property(TARGET randomx-mt PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET randomx-mt PROPERTY CXX_STANDARD 11)
 set_property(TARGET randomx-mt PROPERTY CXX_STANDARD_REQUIRED ON)
-target_compile_options(randomx-mt PRIVATE -O3 -pthread -msimd128 -mrelaxed-simd)
+target_compile_options(randomx-mt PRIVATE -O3 -flto -pthread -msimd128 -mrelaxed-simd)
 
 if(TARGET generate-asm)
   add_dependencies(randomx generate-asm)
@@ -190,7 +191,7 @@ target_link_libraries(web-randomx
   PRIVATE randomx)
 set_property(TARGET web-randomx PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET web-randomx PROPERTY CXX_STANDARD 11)
-set_target_properties(web-randomx PROPERTIES LINK_FLAGS "-O3 -sWASM=1 -sMODULARIZE=1 -sEXPORT_NAME=createWebRandomX -sENVIRONMENT=worker -sWASM_BIGINT=1 -sINITIAL_MEMORY=272MB -sMAXIMUM_MEMORY=3072MB -sALLOW_MEMORY_GROWTH=1 -sABORTING_MALLOC=0 -msimd128 -mrelaxed-simd -sEXPORTED_FUNCTIONS=\"['_malloc','_free','_randomx_hash','_randomx_mine','_randomx_is_full_mem','_randomx_dataset_begin','_randomx_dataset_step','_randomx_dataset_percent','_randomx_dataset_ptr','_randomx_dataset_items','_randomx_dataset_item_bytes','_randomx_dataset_mark_ready','_randomx_set_threads','_randomx_get_threads','_rxSetJitEnabled','_rxjit_set_feature','_rxjit_set_regs_in_memory','_rxjit_set_split_inner_dispatch','_rxjit_set_profile','_rxjit_set_max_memory_pages','_rxjit_set_use_threaded_interp','_rxjit_set_supjit_enabled','_rxjit_set_fuse_n','_rxjit_set_triples_n','_rxjit_set_unroll2','_rxjit_set_shared_code','_rxjit_set_aes_simd','_rxjit_set_aes_relaxed','_rxjit_set_light_mlp','_rxjit_set_kernel_k','_rxjit_effective_fuse_n','_rxjit_effective_triples_n','_rxjit_effective_unroll2','_rxjit_effective_aes_simd']\" -sEXPORTED_RUNTIME_METHODS=HEAPU8")
+set_target_properties(web-randomx PROPERTIES LINK_FLAGS "-O3 -flto -sWASM=1 -sMODULARIZE=1 -sEXPORT_NAME=createWebRandomX -sENVIRONMENT=worker -sWASM_BIGINT=1 -sINITIAL_MEMORY=272MB -sMAXIMUM_MEMORY=3072MB -sALLOW_MEMORY_GROWTH=1 -sABORTING_MALLOC=0 -msimd128 -mrelaxed-simd -sEXPORTED_FUNCTIONS=\"['_malloc','_free','_randomx_hash','_randomx_mine','_randomx_is_full_mem','_randomx_dataset_begin','_randomx_dataset_step','_randomx_dataset_percent','_randomx_dataset_ptr','_randomx_dataset_items','_randomx_dataset_item_bytes','_randomx_dataset_mark_ready','_randomx_set_threads','_randomx_get_threads','_rxSetJitEnabled','_rxjit_set_feature','_rxjit_set_regs_in_memory','_rxjit_set_split_inner_dispatch','_rxjit_set_profile','_rxjit_set_max_memory_pages','_rxjit_set_use_threaded_interp','_rxjit_set_supjit_enabled','_rxjit_set_fuse_n','_rxjit_set_triples_n','_rxjit_set_unroll2','_rxjit_set_shared_code','_rxjit_set_aes_simd','_rxjit_set_aes_relaxed','_rxjit_set_light_mlp','_rxjit_set_kernel_k','_rxjit_effective_fuse_n','_rxjit_effective_triples_n','_rxjit_effective_unroll2','_rxjit_effective_aes_simd']\" -sEXPORTED_RUNTIME_METHODS=HEAPU8")
 
 add_executable(web-randomx-mt
   src/cpp/web_randomx.cpp)
@@ -198,8 +199,8 @@ target_link_libraries(web-randomx-mt
   PRIVATE randomx-mt)
 set_property(TARGET web-randomx-mt PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET web-randomx-mt PROPERTY CXX_STANDARD 11)
-set_target_properties(web-randomx-mt PROPERTIES COMPILE_FLAGS "-O3 -pthread -msimd128 -mrelaxed-simd -mrelaxed-simd -ffast-math")
-set_target_properties(web-randomx-mt PROPERTIES LINK_FLAGS "-O3 -pthread -sWASM=1 -sMODULARIZE=1 -sEXPORT_NAME=createWebRandomX -sENVIRONMENT=worker -sWASM_BIGINT=1 -sMAXIMUM_MEMORY=4GB -sALLOW_MEMORY_GROWTH=1 -sABORTING_MALLOC=0 -sPTHREAD_POOL_SIZE=Math.min(navigator.hardwareConcurrency||8,32) -sPTHREAD_POOL_SIZE_STRICT=0 -sSTACK_SIZE=1048576 -sDEFAULT_PTHREAD_STACK_SIZE=1048576 -msimd128 -mrelaxed-simd -sEXPORTED_FUNCTIONS=\"['_malloc','_free','_randomx_hash','_randomx_mine','_randomx_is_full_mem','_randomx_dataset_begin','_randomx_dataset_step','_randomx_dataset_percent','_randomx_dataset_ptr','_randomx_dataset_items','_randomx_dataset_item_bytes','_randomx_dataset_mark_ready','_randomx_set_threads','_randomx_get_threads','_rxSetJitEnabled','_rxjit_set_feature','_rxjit_set_regs_in_memory','_rxjit_set_split_inner_dispatch','_rxjit_set_profile','_rxjit_set_max_memory_pages','_rxjit_set_use_threaded_interp','_rxjit_set_supjit_enabled','_rxjit_set_fuse_n','_rxjit_set_triples_n','_rxjit_set_unroll2','_rxjit_set_shared_code','_rxjit_set_aes_simd','_rxjit_set_aes_relaxed','_rxjit_set_light_mlp','_rxjit_set_kernel_k','_rxjit_effective_fuse_n','_rxjit_effective_triples_n','_rxjit_effective_unroll2','_rxjit_effective_aes_simd']\" -sEXPORTED_RUNTIME_METHODS=HEAPU8")
+set_target_properties(web-randomx-mt PROPERTIES COMPILE_FLAGS "-O3 -flto -pthread -msimd128 -mrelaxed-simd -ffast-math")
+set_target_properties(web-randomx-mt PROPERTIES LINK_FLAGS "-O3 -flto -pthread -sWASM=1 -sMODULARIZE=1 -sEXPORT_NAME=createWebRandomX -sENVIRONMENT=worker -sWASM_BIGINT=1 -sMAXIMUM_MEMORY=4GB -sALLOW_MEMORY_GROWTH=1 -sABORTING_MALLOC=0 -sPTHREAD_POOL_SIZE=Math.min(navigator.hardwareConcurrency||8,32) -sPTHREAD_POOL_SIZE_STRICT=0 -sSTACK_SIZE=1048576 -sDEFAULT_PTHREAD_STACK_SIZE=1048576 -msimd128 -mrelaxed-simd -sEXPORTED_FUNCTIONS=\"['_malloc','_free','_randomx_hash','_randomx_mine','_randomx_is_full_mem','_randomx_dataset_begin','_randomx_dataset_step','_randomx_dataset_percent','_randomx_dataset_ptr','_randomx_dataset_items','_randomx_dataset_item_bytes','_randomx_dataset_mark_ready','_randomx_set_threads','_randomx_get_threads','_rxSetJitEnabled','_rxjit_set_feature','_rxjit_set_regs_in_memory','_rxjit_set_split_inner_dispatch','_rxjit_set_profile','_rxjit_set_max_memory_pages','_rxjit_set_use_threaded_interp','_rxjit_set_supjit_enabled','_rxjit_set_fuse_n','_rxjit_set_triples_n','_rxjit_set_unroll2','_rxjit_set_shared_code','_rxjit_set_aes_simd','_rxjit_set_aes_relaxed','_rxjit_set_light_mlp','_rxjit_set_kernel_k','_rxjit_effective_fuse_n','_rxjit_effective_triples_n','_rxjit_effective_unroll2','_rxjit_effective_aes_simd']\" -sEXPORTED_RUNTIME_METHODS=HEAPU8")
 
 # Tests
 if(TESTS AND TESTS STREQUAL "true")
