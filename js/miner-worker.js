@@ -235,7 +235,7 @@ function loadWasm() {
       const module = await factory({
         locateFile(path) {
           const name = path.split('/').pop();
-          return new URL('vendor/randomx/' + name + '?v=75', self.location).href;
+          return new URL('vendor/randomx/' + name + '?v=76', self.location).href;
         },
         mainScriptUrlOrBlob: WASM_JS,
       });
@@ -716,7 +716,7 @@ function loop() {
   const t0 = performance.now();
   let n = 0;
   let solved = null;
-  const batch = dsPhase === 'done' ? Math.max(64, cpuThreads * 32) : 4;
+  const batch = dsPhase === 'done' ? Math.max(64, cpuThreads * 32) : Math.max(16, cpuThreads * 8);
   try {
     while (performance.now() - t0 < 800) {
       const r = mineBatch(batch);

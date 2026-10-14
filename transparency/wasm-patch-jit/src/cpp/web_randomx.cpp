@@ -487,14 +487,15 @@ EM_PORT_API(int) randomx_mine(
   if (!ensure_vms(t, mainheight, seedheight, seedhash)) return 0;
 
 #if defined(__EMSCRIPTEN_PTHREADS__)
-  if (t > 1 && max_hashes >= t * 2) {
-    int live = ensure_mine_threads(t);
-    if (live >= t) {
-      int per = max_hashes / t;
-      int extra = max_hashes % t;
+  if (t > 1 && max_hashes > 1) {
+    int active_t = (max_hashes < t) ? max_hashes : t;
+    int live = ensure_mine_threads(active_t);
+    if (live >= active_t) {
+      int per = max_hashes / active_t;
+      int extra = max_hashes % active_t;
       uint32_t at = start_nonce;
       pthread_mutex_lock(&mine_mu);
-      for (int i = 0; i < t; i++) {
+      for (int i = 0; i < active_t; i++) {
         int c = per + (i < extra ? 1 : 0);
         mine_slots[i].blob = blob;
         mine_slots[i].blob_len = blob_len;
@@ -512,14 +513,14 @@ EM_PORT_API(int) randomx_mine(
       pthread_cond_broadcast(&mine_cv);
       for (;;) {
         int all = 1;
-        for (int i = 0; i < t; i++) {
+        for (int i = 0; i < active_t; i++) {
           if (!mine_slots[i].done) all = 0;
         }
         if (all) break;
         pthread_cond_wait(&mine_done_cv, &mine_mu);
       }
       int computed = 0;
-      for (int i = 0; i < t; i++) {
+      for (int i = 0; i < active_t; i++) {
         computed += mine_slots[i].computed;
         if (mine_slots[i].found && found && *found == 0) {
           *found = 1;
