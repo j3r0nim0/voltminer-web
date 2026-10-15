@@ -4,10 +4,10 @@
    are network-first, so the HTML is never stale while online, and the worker
    registers with updateViaCache: 'none' so sw.js itself is never served from
    the HTTP cache. Sub-resources are stale-while-revalidate, which is safe
-   because they are versioned by ?v=77. CSP-friendly: no eval, no
+   because they are versioned by ?v=78. CSP-friendly: no eval, no
    importScripts, no third-party origins. */
 'use strict';
-const VERSION = '77';
+const VERSION = '78';
 const SHELL_CACHE = `vmw-shell-${VERSION}`;
 const ASSETS_CACHE = `vmw-assets-${VERSION}`;
 const CURRENT_CACHES = [SHELL_CACHE, ASSETS_CACHE];
@@ -19,7 +19,7 @@ const PRECACHE = [
   './diag.html',
   './notices.html',
   './manifest.webmanifest',
-  './css/styles.css?v=77',
+  './css/styles.css?v=78',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',

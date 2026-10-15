@@ -1279,12 +1279,18 @@ static uint32_t emit_prologue(uint32_t vm_state_ptr, uint8_t *buf) {
 	I32_LOAD_OFF(VM_DS_PTR_OFFSET);
 	LS(LOCT_ds_ptr);
 	if (!g_light_fn_len) {
-		// Fast mode: prefetch iteration 0's dataset item at ds_ptr + ma
+		// Fast mode: prefetch iteration 0's dataset item at ds_ptr + ma (offsets 0 and 32)
 		ARENA_PTR(g_r_file_base + RXJIT_ARENA_PAD_OFF);
 		LG(LOCT_ds_ptr);
 		LG(LOC_ma);
 		I32_ADD();
+		LT(LOC_tmp);
 		I64_LOAD_OFF(0);
+		I64_STORE_OFF(0);
+
+		ARENA_PTR(g_r_file_base + RXJIT_ARENA_PAD_OFF + 8);
+		LG(LOC_tmp);
+		I64_LOAD_OFF(32);
 		I64_STORE_OFF(0);
 	}
 	THUNK_END;
@@ -1471,13 +1477,18 @@ static uint32_t emit_step5_mx_xor(uint8_t *buf) {
 static uint32_t emit_step6_prefetch(uint8_t *buf) {
 	THUNK_BEGIN;
 	if (!g_light_fn_len) {
-		// Fast mode: prefetch next iteration's 64-byte dataset item (LOCT_ds_ptr + LOC_mx).
-		// Storing to RXJIT_ARENA_PAD_OFF prevents dead-code elimination in TurboFan/OMG.
+		// Fast mode: prefetch next iteration's 64-byte dataset item at ds_ptr + mx (offsets 0 and 32)
 		ARENA_PTR(g_r_file_base + RXJIT_ARENA_PAD_OFF);
 		LG(LOCT_ds_ptr);
 		LG(LOC_mx);
 		I32_ADD();
+		LT(LOC_tmp);
 		I64_LOAD_OFF(0);
+		I64_STORE_OFF(0);
+
+		ARENA_PTR(g_r_file_base + RXJIT_ARENA_PAD_OFF + 8);
+		LG(LOC_tmp);
+		I64_LOAD_OFF(32);
 		I64_STORE_OFF(0);
 	} else if (g_light_mlp == 1 && g_light_cache_base) {
 		// Light mode: probe next item's first cache-line qword early in Step 6
@@ -1836,8 +1847,8 @@ static uint32_t emit_main_loop_body(uint32_t vm_state_ptr, uint32_t scratchpad_p
 		}
 
 		p += emit_step5_mx_xor(p);
-		p += emit_step6_prefetch(p);
 		p += emit_step7_dataset_xor(p);
+		p += emit_step6_prefetch(p);
 		p += emit_step8_swap_mx_ma(p);
 		p += emit_step9_store_r(scratchpad_ptr, p);
 		p += emit_step10_f_xor_e(p);
