@@ -19,7 +19,7 @@ export function defaultBridgeUrl() {
     if (q && /^wss?:\/\//i.test(q)) return q;
   } catch { /* ignore */ }
   const host = typeof location !== 'undefined' ? location.hostname : '';
-  if (host === 'localhost' || host === '127.0.0.1') return 'ws://127.0.0.1:8787';
+  if (host === 'localhost' || host === '127.0.0.1') return PROD_BRIDGE_WS;
   return relayUrl();
 }
 
