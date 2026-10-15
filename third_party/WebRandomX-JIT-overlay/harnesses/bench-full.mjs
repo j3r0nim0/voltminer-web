@@ -3,6 +3,8 @@
    mirroring the miner. Uses the node build under /tmp/rxtest.
      --threads 1   -> single randomx_hash loop
      --threads N>1 -> randomx_mine batches on N C-side pthreads */
+globalThis.self = globalThis;
+globalThis.location = { href: 'file:///bench.html' };
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 

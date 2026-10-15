@@ -1278,6 +1278,15 @@ static uint32_t emit_prologue(uint32_t vm_state_ptr, uint8_t *buf) {
 	LG(LOC_tmp);
 	I32_LOAD_OFF(VM_DS_PTR_OFFSET);
 	LS(LOCT_ds_ptr);
+	if (!g_light_fn_len) {
+		// Fast mode: prefetch iteration 0's dataset item at ds_ptr + ma
+		ARENA_PTR(g_r_file_base + RXJIT_ARENA_PAD_OFF);
+		LG(LOCT_ds_ptr);
+		LG(LOC_ma);
+		I32_ADD();
+		I64_LOAD_OFF(0);
+		I64_STORE_OFF(0);
+	}
 	THUNK_END;
 }
 
@@ -1458,6 +1467,39 @@ static uint32_t emit_step5_mx_xor(uint8_t *buf) {
 	THUNK_END;
 }
 
+// Step 6: prefetch next iteration's dataset line (Fast) or cache block (Light)
+static uint32_t emit_step6_prefetch(uint8_t *buf) {
+	THUNK_BEGIN;
+	if (!g_light_fn_len) {
+		// Fast mode: prefetch next iteration's 64-byte dataset item (LOCT_ds_ptr + LOC_mx).
+		// Storing to RXJIT_ARENA_PAD_OFF prevents dead-code elimination in TurboFan/OMG.
+		ARENA_PTR(g_r_file_base + RXJIT_ARENA_PAD_OFF);
+		LG(LOCT_ds_ptr);
+		LG(LOC_mx);
+		I32_ADD();
+		I64_LOAD_OFF(0);
+		I64_STORE_OFF(0);
+	} else if (g_light_mlp == 1 && g_light_cache_base) {
+		// Light mode: probe next item's first cache-line qword early in Step 6
+		// so memory access latency is hidden while step 7's item computation and upcoming steps execute.
+		ARENA_PTR(g_r_file_base + RXJIT_ARENA_PAD_OFF);
+		LG(LOCT_ds_ptr);
+		LG(LOC_mx);
+		WI32_CONST(6);
+		I32_SHR_U();
+		I32_ADD();
+		WI32_CONST(0x3FFFFF); // CACHE_ITEM_MASK (wasm_jit_superscalar.cpp)
+		I32_AND();
+		WI32_CONST(6);
+		I32_SHL();
+		WI32_CONST((int32_t)g_light_cache_base);
+		I32_ADD();
+		I64_LOAD_OFF(0);
+		I64_STORE_OFF(0);
+	}
+	THUNK_END;
+}
+
 // Step 7: r[i] ^= dataset[LOCT_ds_ptr + ma + i*8] for i in 0..7
 //   V3 mode: same direct-memory pattern as step 2 (compile-time index).
 // Light: the item is ds_ptr (dataset_offset / 64) + ma / 64. mx after step 5
@@ -1497,24 +1539,6 @@ static uint32_t emit_step7_dataset_xor(uint8_t *buf) {
 		WASM_U8(0x6c); // i32.mul
 		I32_ADD();
 	} else if (g_light_fn_len) { // light: item(ds_ptr + ma/64, arena ITEM), then xor that line
-		if (g_light_mlp == 1 && g_light_cache_base) {
-			// probe: arena ITEM qword 0 = the next item's first cache-line
-			// qword (overwritten by the call; the store keeps the load alive)
-			ARENA_PTR(g_r_file_base + RXJIT_ARENA_ITEM_OFF);
-			LG(LOCT_ds_ptr);
-			LG(LOC_mx);
-			WI32_CONST(6);
-			I32_SHR_U();
-			I32_ADD();
-			WI32_CONST(0x3FFFFF); // CACHE_ITEM_MASK (wasm_jit_superscalar.cpp)
-			I32_AND();
-			WI32_CONST(6);
-			I32_SHL();
-			WI32_CONST((int32_t)g_light_cache_base);
-			I32_ADD();
-			I64_LOAD_OFF(0);
-			I64_STORE_OFF(0);
-		}
 		LG(LOCT_ds_ptr);
 		LG(LOC_ma);
 		WI32_CONST(6);
@@ -1812,7 +1836,7 @@ static uint32_t emit_main_loop_body(uint32_t vm_state_ptr, uint32_t scratchpad_p
 		}
 
 		p += emit_step5_mx_xor(p);
-		// step 6: prefetch — wasm has no prefetch, skipped
+		p += emit_step6_prefetch(p);
 		p += emit_step7_dataset_xor(p);
 		p += emit_step8_swap_mx_ma(p);
 		p += emit_step9_store_r(scratchpad_ptr, p);

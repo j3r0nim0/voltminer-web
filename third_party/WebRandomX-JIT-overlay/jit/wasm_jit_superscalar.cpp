@@ -166,27 +166,29 @@ static inline int RREG(const ItemLocals &L, int idx) {
 static uint32_t emit_mulh_inline(const ItemLocals &L, int a, int b, bool is_signed, uint8_t *buf) {
 	THUNK_BEGIN;
 #define HSHR() do { if (is_signed) I64_SHR_S(); else I64_SHR_U(); } while (0)
+#define I64_ZERO_EXT32() do { I32_WRAP_I64(); I64_EXT_I32_U(); } while (0)
 	// t = aH*bL + ((aL*bL) >>u 32)
 	LG(a); WI64_CONST(32); HSHR();
-	LG(b); WI64_CONST(0xffffffffLL); I64_AND(); I64_MUL();
-	LG(a); WI64_CONST(0xffffffffLL); I64_AND();
-	LG(b); WI64_CONST(0xffffffffLL); I64_AND(); I64_MUL();
+	LG(b); I64_ZERO_EXT32(); I64_MUL();
+	LG(a); I64_ZERO_EXT32();
+	LG(b); I64_ZERO_EXT32(); I64_MUL();
 	WI64_CONST(32); I64_SHR_U(); I64_ADD();
 	LS(L.mt);
 	// (aL*bH + (t & M)) >> 32
 	if (a == b) { // aH*aL, as in t
 		LG(a); WI64_CONST(32); HSHR();
-		LG(b); WI64_CONST(0xffffffffLL); I64_AND(); I64_MUL();
+		LG(b); I64_ZERO_EXT32(); I64_MUL();
 	} else {
-		LG(a); WI64_CONST(0xffffffffLL); I64_AND();
+		LG(a); I64_ZERO_EXT32();
 		LG(b); WI64_CONST(32); HSHR(); I64_MUL();
 	}
-	LG(L.mt); WI64_CONST(0xffffffffLL); I64_AND(); I64_ADD();
+	LG(L.mt); I64_ZERO_EXT32(); I64_ADD();
 	WI64_CONST(32); HSHR();
 	// + aH*bH + (t >> 32)
 	LG(a); WI64_CONST(32); HSHR();
 	LG(b); WI64_CONST(32); HSHR(); I64_MUL(); I64_ADD();
 	LG(L.mt); WI64_CONST(32); HSHR(); I64_ADD();
+#undef I64_ZERO_EXT32
 #undef HSHR
 	THUNK_END;
 }
@@ -443,7 +445,7 @@ static uint32_t item_bytes_bound(const randomx::DecodedSuperscalarProgram progra
 		n += 128;
 		for (uint32_t j = 0; j < programs[i].size; ++j) {
 			const ST op = (ST)programs[i].insts[j].op;
-			n += (op == ST::IMULH_R || op == ST::ISMULH_R) ? 96 : 16;
+			n += (op == ST::IMULH_R || op == ST::ISMULH_R) ? 72 : 16;
 		}
 	}
 	return n;
