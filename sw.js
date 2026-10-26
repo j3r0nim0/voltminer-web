@@ -4,10 +4,10 @@
    are network-first, so the HTML is never stale while online, and the worker
    registers with updateViaCache: 'none' so sw.js itself is never served from
    the HTTP cache. Sub-resources are stale-while-revalidate, which is safe
-   because they are versioned by ?v=78. CSP-friendly: no eval, no
+   because they are versioned by ?v=79. CSP-friendly: no eval, no
    importScripts, no third-party origins. */
 'use strict';
-const VERSION = '78';
+const VERSION = '79';
 const SHELL_CACHE = `vmw-shell-${VERSION}`;
 const ASSETS_CACHE = `vmw-assets-${VERSION}`;
 const CURRENT_CACHES = [SHELL_CACHE, ASSETS_CACHE];
@@ -19,7 +19,7 @@ const PRECACHE = [
   './diag.html',
   './notices.html',
   './manifest.webmanifest',
-  './css/styles.css?v=78',
+  './css/styles.css?v=79',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
@@ -44,7 +44,20 @@ self.addEventListener('install', (event) => {
           }),
         ),
       ),
-    ),
+    ).then(async () => {
+      // A shell without index.html is the one state that turns a slow fetch into a
+      // dead end: networkFirst falls back to the cache, misses, and shows the
+      // offline page although the origin is fine. Retry that one file once.
+      const cache = await caches.open(SHELL_CACHE);
+      if (!(await cache.match('./index.html'))) {
+        try {
+          await cache.add('./index.html');
+          console.info('[sw] shell recovered on retry');
+        } catch (err) {
+          console.warn('[sw] shell retry failed', err && err.message);
+        }
+      }
+    }),
     // No skipWaiting() here on purpose: the page decides when to hand over,
     // so a live mining session is not interrupted mid-install.
   );
@@ -60,21 +73,41 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) =>
-        Promise.all(
-          keys.filter((k) => !CURRENT_CACHES.includes(k)).map((k) => caches.delete(k)),
-        ),
-      )
+      .then(async (keys) => {
+        // If this version's shell is incomplete, keep the previous shell cache(s) so
+        // networkFirst still has something to fall back to. Deleting them here is
+        // what turned a partial precache into "no cached copy is available".
+        const shell = await caches.open(SHELL_CACHE);
+        const keep = new Set(CURRENT_CACHES);
+        if (!(await shell.match('./index.html'))) {
+          for (const k of keys) if (k.startsWith('vmw-shell-')) keep.add(k);
+        }
+        return Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)));
+      })
       .then(() => self.clients.claim()),
   );
 });
 
-function offlineFallback() {
-  // Served as HTML so the browser renders the message rather than dumping it.
+function offlineFallback(reason, request) {
+  // "Offline" was a lie whenever the browser had a connection and one request was
+  // merely slow: networkFirst aborts at 8 s, then this page would claim no network.
+  // Say which state we are actually in, and show enough to diagnose it.
+  const online = !(typeof navigator !== 'undefined' && navigator.onLine === false);
+  const title = online ? 'Origin unreachable' : 'Offline';
+  const body = online
+    ? 'The browser has a connection, but this page did not arrive within 8 s and no cached copy was available. ' +
+      'That is a slow or failed request, not necessarily an outage. Retry in a moment.'
+    : 'VoltMiner is offline and no cached copy is available. Reconnect and reload to continue mining.';
+  let path = '?';
+  try { path = new URL(request.url).pathname; } catch { /* keep ? */ }
+  const detail = `sw ${VERSION} \u00b7 ${path} \u00b7 ${String(reason || 'unknown').slice(0, 120)}`;
+  // meta refresh rather than script: the project serves no inline JS anywhere.
   return new Response(
-    '<!doctype html><meta charset="utf-8"><title>VoltMiner offline</title>' +
-      '<h1>Offline</h1><p>VoltMiner is offline and no cached copy is available. ' +
-      'Reconnect and reload to continue mining.</p>',
+    '<!doctype html><meta charset="utf-8"><title>VoltMiner ' + title + '</title>' +
+      '<meta http-equiv="refresh" content="10">' +
+      '<h1>' + title + '</h1><p>' + body + '</p>' +
+      '<p><a href="./">Reload now</a></p>' +
+      '<p style="font:12px ui-monospace,monospace;color:#888">' + detail + '</p>',
     { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
   );
 }
@@ -95,7 +128,7 @@ async function networkFirst(request) {
       (await caches.match(request, { ignoreSearch: true })) ||
       (await caches.match('./')) ||
       (await caches.match('./index.html')) ||
-      offlineFallback()
+      offlineFallback((err && (err.name || err.message)) || 'fetch failed', request)
     );
   } finally {
     clearTimeout(timer);
