@@ -24,31 +24,54 @@ VoltMiner Web brings **Monero (XMR)** mining into any modern web browser without
 - **Offline & PWA Enabled**: Ships with a network-first Service Worker (`sw.js`) and web app manifest for installation on desktop and mobile.
 - **On-Device Diagnostics**: Includes `diag.html` to measure hardware concurrency, WebAssembly feature support, and benchmark hashing performance.
 
-## Quick Start: Running Locally
+## Quick Start: Running the Stratum Bridge
 
-### 1. Start the Stratum Bridge
+Browsers cannot open raw TCP or TLS stratum sockets directly due to browser security sandboxes. To connect your browser to the MoneroOcean pool, run a lightweight WebSocket-to-Stratum bridge on your computer.
 
-Browsers cannot open raw TCP/TLS stratum sockets directly due to sandbox restrictions. Run the lightweight bridge locally:
+### Method A: Direct with Node.js (Recommended — Quickest, no Docker required)
 
-Using Docker:
+From the project root terminal:
 ```bash
-docker compose up -d
+node tools/web-stratum-bridge/server.mjs
 ```
+*(or `npm start --prefix tools/web-stratum-bridge`)*
 
-Or using Node.js:
-```bash
-cd tools/web-stratum-bridge
-npm install
-node server.mjs
+You will see:
+```text
+listening ws://127.0.0.1:8787 → tls://gulf.moneroocean.stream:20032
+origins https://j3r0nim0.github.io, ... + http://localhost|127.0.0.1
 ```
-The bridge listens on `ws://127.0.0.1:8787` and connects upstream to `gulf.moneroocean.stream:20032` (TLS).
+Leave this terminal window open while mining. (Press `Ctrl+C` to stop).
 
-### 2. Start the Local Web Server
+---
 
-```bash
-node tools/dev-server.mjs
-```
-Open [http://127.0.0.1:8099](http://127.0.0.1:8099) in your browser.
+### Method B: Using Docker Compose
+
+If you prefer running in a background container:
+1. Make sure **Docker Desktop** is open and running on your computer.
+2. From the repository root, start the container:
+   ```bash
+   docker compose up -d
+   ```
+3. To view logs:
+   ```bash
+   docker compose logs -f
+   ```
+4. To stop the bridge:
+   ```bash
+   docker compose down
+   ```
+
+---
+
+## Start Mining Monero (XMR)
+
+1. Open the live site: [https://j3r0nim0.github.io/voltminer-web/](https://j3r0nim0.github.io/voltminer-web/) (or your local `node tools/dev-server.mjs`).
+2. Paste your **Monero wallet address**.
+3. Notice the **Stratum bridge** field is already set to `ws://127.0.0.1:8787` by default.
+4. Tick the yellow consent box: *"I agree — start hashing on this device"*.
+5. Click **Start mining**.
+6. Accepted shares will start submitting to your wallet on MoneroOcean!
 
 ## Deploying to GitHub Pages
 
