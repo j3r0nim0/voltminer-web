@@ -416,7 +416,10 @@ export class MinerClient {
 
       let why = `Disconnected from bridge. code=${ev.code} clean=${ev.wasClean}${ev.reason ? ` reason=${ev.reason}` : ''}. Hashing paused (dataset kept).`;
       if (ev.code === 1006 && (this.bridgeUrl.includes('127.0.0.1') || this.bridgeUrl.includes('localhost'))) {
-        why = `Could not connect to local bridge at ${this.bridgeUrl}. Start it in terminal with 'node tools/web-stratum-bridge/server.mjs' (or docker compose up), or enter a remote bridge URL.`;
+        const isSafari = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        why = isSafari
+          ? `Safari blocks public HTTPS from connecting to local ws://127.0.0.1 (mixed content). Run 'node tools/dev-server.mjs' and open http://127.0.0.1:8099 to mine in Safari, or switch to Chrome.`
+          : `Could not connect to local bridge at ${this.bridgeUrl}. Start it in terminal with 'node tools/web-stratum-bridge/server.mjs' (or docker compose up), or enter a remote bridge URL.`;
       }
       this.#emit('status', { message: why });
       if (this.holdReconnectUntil && Date.now() < this.holdReconnectUntil) {

@@ -73,6 +73,16 @@ If you prefer running in a background container:
 5. Click **Start mining**.
 6. Accepted shares will start submitting to your wallet on MoneroOcean!
 
+> [!TIP]
+> **Safari vs. Chrome / Local Hosting:**
+> * **Google Chrome & Chromium**: Connect directly from the live GitHub Pages site (`https://j3r0nim0.github.io/voltminer-web/`) to your local bridge (`ws://127.0.0.1:8787`).
+> * **Apple Safari**: Strictly blocks unencrypted `ws://` connections from `https://` websites (mixed-content policy).
+> * **Run locally with zero browser blocks (recommended for Safari)**:
+>   ```bash
+>   node tools/dev-server.mjs
+>   ```
+>   Then open [http://127.0.0.1:8099](http://127.0.0.1:8099) in your browser. Both the web interface and stratum bridge run on the same local loopback address with full multithreaded Fast mode.
+
 ## Deploying to GitHub Pages
 
 1. Fork or push this repository to GitHub.

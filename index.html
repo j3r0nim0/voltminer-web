@@ -86,6 +86,7 @@
           <li><strong>Keep the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can get the relay rate-limited.</li>
           <li><strong>RandomX, JIT-compiled in Wasm.</strong> Same algorithm family as native miners (<code>rx/0</code>). A WebAssembly JIT compiles RandomX programs as they are generated — roughly 4× the portable interpreter — but there are no huge pages, so it still falls well short of native.</li>
           <li><strong>Why a bridge relay.</strong> A browser cannot open a raw TCP or TLS stratum socket to the pool directly, so a lightweight WebSocket-to-Stratum bridge forwards messages between the browser and pool without altering credentials, jobs, or shares.</li>
+          <li><strong>Browser compatibility (Chrome vs Safari):</strong> Chrome and Chromium-based browsers allow connecting from this HTTPS page directly to your local bridge (<span class="mono">ws://127.0.0.1:8787</span>). Safari strictly blocks unencrypted <span class="mono">ws://</span> from <span class="mono">https://</span> (mixed content). <em>Using Safari, or want zero browser network blocks?</em> Run the frontend locally: <code>node tools/dev-server.mjs</code> and open <a href="http://127.0.0.1:8099" target="_blank" rel="noopener">http://127.0.0.1:8099</a>.</li>
         </ul>
       </aside>
 
@@ -99,7 +100,7 @@
           <label class="mine-label" for="bridge-url">Stratum bridge (WebSocket relay)</label>
           <input id="bridge-url" name="bridge-url" type="text" spellcheck="false" autocomplete="off"
                  placeholder="ws://127.0.0.1:8787 or wss://your-bridge.example.com" />
-          <p class="note" id="relay-note">Relay: <span class="mono" id="tr-relay-pre">—</span> — WebSocket hop to the pool. A bridge is required because browsers cannot open raw TCP stratum sockets. Run <span class="mono">node tools/web-stratum-bridge/server.mjs</span> locally, or enter a remote bridge URL. See <a href="transparency/">/transparency</a>.</p>
+          <p class="note" id="relay-note">Relay: <span class="mono" id="tr-relay-pre">—</span> — WebSocket hop to the pool. A bridge is required because browsers cannot open raw TCP stratum sockets. Run <span class="mono">node tools/web-stratum-bridge/server.mjs</span> locally, or enter a remote bridge URL. <em>Safari user? Run <span class="mono">node tools/dev-server.mjs</span> and open <span class="mono">http://127.0.0.1:8099</span> (bypasses Safari's HTTPS-to-WS mixed content block).</em> See <a href="transparency/">/transparency</a>.</p>
 
           <label class="mine-label" for="threads">Threads: <strong id="threads-val">50%</strong>
             <span class="muted" id="threads-max">(detecting…)</span></label>
