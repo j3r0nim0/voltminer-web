@@ -57,12 +57,11 @@ flowchart TD
 * Provided turnkey local hosting via [`tools/dev-server.mjs`](file:///Users/jerry/Developer/voltminer-web/tools/dev-server.mjs) running on `http://127.0.0.1:8099`, completely bypassing all browser cross-network checks for Safari and Chrome users alike.
 * Verified hashing performance in headless and live browser sessions (achieving ~40–140 H/s).
 
-### Phase 6: DigitalOcean Server Teardown Checklist (Ready to Destroy)
-1. **Log in to DigitalOcean**.
-2. Navigate to your **Droplets** panel.
-3. Select the `137.184.209.157` droplet.
-4. Click **Destroy** → **Destroy this Droplet**.
-5. Once destroyed, the IP address is returned to the pool and no further charges will accrue.
+### Phase 6: DigitalOcean Droplet Decommissioning (Completed)
+* **Retained Droplet**: The droplet `137.184.209.157` is preserved because other projects (`spacebucks-testnet`) run on it.
+* **Bridge Process Killed**: `voltminer-bridge.service` was stopped and disabled (`systemctl stop voltminer-bridge && systemctl disable voltminer-bridge`).
+* **Caddy Virtual Hosts Decommissioned**: Removed `web.voltminer.net` and `bridge.voltminer.net` from `/etc/caddy/Caddyfile` on the droplet and reloaded Caddy (`systemctl reload caddy`).
+* **Verified**: Port 8787 is closed on the droplet; `spacebucks` continues serving HTTP 200 OK without interruption.
 
 ---
 
