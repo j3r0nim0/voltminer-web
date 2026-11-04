@@ -99,7 +99,7 @@
           <label class="mine-label" for="bridge-url">Stratum bridge (WebSocket relay)</label>
           <input id="bridge-url" name="bridge-url" type="text" spellcheck="false" autocomplete="off"
                  placeholder="ws://127.0.0.1:8787 or wss://your-bridge.example.com" />
-          <p class="note" id="relay-note">Relay: <span class="mono" id="tr-relay-pre">—</span> — WebSocket hop to the stratum pool. It rewrites nothing in either direction; see <a href="transparency/">/transparency</a>.</p>
+          <p class="note" id="relay-note">Relay: <span class="mono" id="tr-relay-pre">—</span> — WebSocket hop to the pool. A bridge is required because browsers cannot open raw TCP stratum sockets. Run <span class="mono">node tools/web-stratum-bridge/server.mjs</span> locally, or enter a remote bridge URL. See <a href="transparency/">/transparency</a>.</p>
 
           <label class="mine-label" for="threads">Threads: <strong id="threads-val">50%</strong>
             <span class="muted" id="threads-max">(detecting…)</span></label>

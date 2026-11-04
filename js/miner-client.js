@@ -414,7 +414,10 @@ export class MinerClient {
         return;
       }
 
-      const why = `Disconnected from bridge. code=${ev.code} clean=${ev.wasClean}${ev.reason ? ` reason=${ev.reason}` : ''}. Hashing paused (dataset kept).`;
+      let why = `Disconnected from bridge. code=${ev.code} clean=${ev.wasClean}${ev.reason ? ` reason=${ev.reason}` : ''}. Hashing paused (dataset kept).`;
+      if (ev.code === 1006 && (this.bridgeUrl.includes('127.0.0.1') || this.bridgeUrl.includes('localhost'))) {
+        why = `Could not connect to local bridge at ${this.bridgeUrl}. Start it in terminal with 'node tools/web-stratum-bridge/server.mjs' (or docker compose up), or enter a remote bridge URL.`;
+      }
       this.#emit('status', { message: why });
       if (this.holdReconnectUntil && Date.now() < this.holdReconnectUntil) {
         const left = this.holdReconnectUntil - Date.now();
