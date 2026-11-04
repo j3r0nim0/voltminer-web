@@ -46,8 +46,24 @@ function isLoopback(addr) {
 }
 
 const server = http.createServer((req, res) => {
+  const origin = req.headers.origin || '*';
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': '*',
+      'Access-Control-Allow-Private-Network': 'true',
+      'Access-Control-Max-Age': '86400',
+    });
+    res.end();
+    return;
+  }
   if (req.url === '/health') {
-    res.writeHead(200, { 'content-type': 'application/json' });
+    res.writeHead(200, {
+      'content-type': 'application/json',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Private-Network': 'true',
+    });
     res.end(JSON.stringify({
       ok: true,
       experiment: 'voltminer-web-stratum-bridge',
@@ -58,7 +74,11 @@ const server = http.createServer((req, res) => {
     }));
     return;
   }
-  res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+  res.writeHead(200, {
+    'content-type': 'text/plain; charset=utf-8',
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Private-Network': 'true',
+  });
   res.end(
     'VoltMiner experimental stratum bridge (not a product).\n' +
       `Upstream: tls://${POOL_HOST}:${POOL_PORT}\n` +
@@ -69,6 +89,12 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({
   server,
   clientTracking: true,
+});
+
+wss.on('headers', (headers, req) => {
+  const origin = req.headers.origin || '*';
+  headers.push(`Access-Control-Allow-Origin: ${origin}`);
+  headers.push('Access-Control-Allow-Private-Network: true');
 });
 
 wss.on('connection', (ws, req) => {
