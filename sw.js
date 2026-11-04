@@ -4,10 +4,10 @@
    are network-first, so the HTML is never stale while online, and the worker
    registers with updateViaCache: 'none' so sw.js itself is never served from
    the HTTP cache. Sub-resources are stale-while-revalidate, which is safe
-   because they are versioned by ?v=79. CSP-friendly: no eval, no
+   because they are versioned by ?v=80. CSP-friendly: no eval, no
    importScripts, no third-party origins. */
 'use strict';
-const VERSION = '79';
+const VERSION = '80';
 const SHELL_CACHE = `vmw-shell-${VERSION}`;
 const ASSETS_CACHE = `vmw-assets-${VERSION}`;
 const CURRENT_CACHES = [SHELL_CACHE, ASSETS_CACHE];
@@ -19,7 +19,7 @@ const PRECACHE = [
   './diag.html',
   './notices.html',
   './manifest.webmanifest',
-  './css/styles.css?v=79',
+  './css/styles.css?v=80',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
@@ -115,15 +115,22 @@ function withCoiHeaders(response) {
   if (!response || response.status === 0 || response.type === 'opaque') {
     return response;
   }
-  const headers = new Headers(response.headers);
-  headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-  headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
-  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  if (response.status === 304 || response.status === 204 || response.status === 205) {
+    return response;
+  }
+  try {
+    const headers = new Headers(response.headers);
+    headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch (_) {
+    return response;
+  }
 }
 
 async function networkFirst(request) {
@@ -189,7 +196,7 @@ self.addEventListener('fetch', (event) => {
   // 3. Same-origin only — never proxy anything cross-origin.
   if (url.origin !== self.location.origin) return;
   // 4. Explicit bypass (WebSocket upgrade, probes, sw.js, manifest).
-  if (BYPASS.has(url.pathname)) return;
+  if (Array.from(BYPASS).some((b) => url.pathname.endsWith(b))) return;
 
   // 5. Navigations: network-first, so HTML is never stale while online.
   if (request.mode === 'navigate') {
