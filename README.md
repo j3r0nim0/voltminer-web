@@ -1,6 +1,6 @@
 # ⚡ VoltMiner Web
 
-An open-source, standalone in-browser **Monero (XMR)** miner. Powered by a **recompiled XMRig / RandomX core engine** compiled to WebAssembly (Wasm) with JIT acceleration, running entirely client-side in Web Workers.
+An open-source, standalone in-browser **Monero (XMR)** miner. Powered by a **XMRig / RandomX core engine** compiled to WebAssembly (Wasm) with JIT acceleration, running entirely client-side in Web Workers.
 
 **VoltMiner Web takes 0% fee** — 100% of your hashrate goes directly to your own Monero (XMR) wallet address on MoneroOcean. No dev tax, no redirected shares, and no swapped payout addresses.
 
