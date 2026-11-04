@@ -162,7 +162,7 @@
     window.createWebRandomX = undefined;
     if (typeof factory !== 'function') throw new Error('the glue did not export a factory');
     const module = await factory({
-      locateFile: (p) => new URL(WASM_DIR + p.split('/').pop() + '?v=80', base).href,
+      locateFile: (p) => new URL(WASM_DIR + p.split('/').pop() + '?v=81', base).href,
       mainScriptUrlOrBlob: url,
     });
     if (!module || typeof module._randomx_hash !== 'function') throw new Error('_randomx_hash was not exported');
@@ -216,8 +216,8 @@
     running = true;
     runBtn.disabled = true;
     hashStatus.textContent = 'hashing…';
-    const singleUrl = new URL(WASM_DIR + 'web-randomx.js?v=80', base).href;
-    const mtUrl = new URL(WASM_DIR + 'web-randomx-mt.js?v=80', base).href;
+    const singleUrl = new URL(WASM_DIR + 'web-randomx.js?v=81', base).href;
+    const mtUrl = new URL(WASM_DIR + 'web-randomx-mt.js?v=81', base).href;
     body['wasm reference vector'] = []; body['threads build'] = []; body['verdict'] = [];
     push('wasm reference vector', 'height: 1 (genesis epoch, zero seed)');
     push('wasm reference vector', 'seed: 32 bytes of 0x00');

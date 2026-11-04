@@ -7,7 +7,7 @@ import {
   canShareDataset,
   hardwareThreads,
   loadOrCreateWorkerId,
-} from './miner-client.js?v=80';
+} from './miner-client.js?v=81';
 
 const $ = (id) => document.getElementById(id);
 
@@ -21,6 +21,11 @@ const form = $('mine-form');
 const startBtn = $('start');
 const stopBtn = $('stop');
 const bridgeEl = $('bridge-url');
+const trRelay = $('tr-relay');
+const trRelayPre = $('tr-relay-pre');
+const trMo = $('tr-mo');
+const chargingOnly = $('charging-only');
+const cap60 = $('cap60');
 const statsBox = $('stats');
 const logEl = $('st-log');
 const moLink = $('mo-link');
@@ -260,9 +265,9 @@ function startMining() {
   moLink.href = `https://moneroocean.stream/#/wallet/${encodeURIComponent(wallet)}/overview`;
 
   // The relay in use, and the one-click check on the pool's own dashboard.
-  trRelay.textContent = bridgeUrl;
+  if (trRelay) trRelay.textContent = bridgeUrl;
   if (trRelayPre) trRelayPre.textContent = bridgeUrl;
-  trMo.href = moLink.href;
+  if (trMo && moLink) trMo.href = moLink.href;
 
   setRunningUI(true);
   startSoakClock();
@@ -322,10 +327,6 @@ document.addEventListener('visibilitychange', () => {
 const OPFS_HINT = 'the RandomX dataset cache (one file per network seed)';
 const SESSION_CAP_MS = 60 * 60 * 1000;
 
-const chargingOnly = document.getElementById('charging-only');
-const cap60 = document.getElementById('cap60');
-const trRelay = document.getElementById('tr-relay');
-const trMo = document.getElementById('tr-mo');
 let batteryState = null;
 let capTimer = null;
 
@@ -426,7 +427,11 @@ const forgetBtn = document.getElementById('forget-wallet');
 if (forgetBtn) forgetBtn.addEventListener('click', (e) => { e.preventDefault(); forgetWallet(); });
 refreshStorage();
 initBattery();
-const initialBridge = defaultBridgeUrl();
+let initialBridge = defaultBridgeUrl();
+try {
+  const savedBridge = localStorage.getItem('voltminer.web.bridge');
+  if (savedBridge) initialBridge = savedBridge;
+} catch (_) {}
 if (bridgeEl) {
   bridgeEl.value = initialBridge;
   bridgeEl.addEventListener('input', () => {
