@@ -1,16 +1,23 @@
 # ⚡ VoltMiner Web
 
-An open-source, standalone RandomX in-browser web miner. RandomX runs client-side in a Web Worker (WebAssembly) and submits shares directly to the visitor's own MoneroOcean wallet.
+An open-source, standalone in-browser **Monero (XMR)** miner. Powered by a **recompiled XMRig / RandomX core engine** compiled to WebAssembly (Wasm) with JIT acceleration, running entirely client-side in Web Workers.
 
-**VoltMiner Web takes 0% fee** — no cut of your hashrate, no redirected shares, no swapped payout address. The mining pool applies its standard pool fee.
+**VoltMiner Web takes 0% fee** — 100% of your hashrate goes directly to your own Monero (XMR) wallet address on MoneroOcean. No dev tax, no redirected shares, and no swapped payout addresses.
 
 ```
-browser Wasm worker  --WS/WSS-->  stratum bridge  --TLS-->  MoneroOcean stratum
+browser Wasm (XMRig / RandomX JIT)  --WS/WSS-->  stratum bridge  --TLS-->  MoneroOcean pool (XMR)
 ```
+
+## What is VoltMiner Web?
+
+VoltMiner Web brings **Monero (XMR)** mining into any modern web browser without installing native binaries or kernel drivers:
+- **Recompiled XMRig / RandomX Core**: The core hashing algorithms (`rx/0`) from XMRig / RandomX have been ported and recompiled for WebAssembly, featuring a custom Wasm JIT compiler, POSIX multithreading (pthreads), and dual-offset DRAM prefetching.
+- **Direct Monero (XMR) Payouts**: Enter your standard (95-character) or integrated (106-character) Monero address. The address is passed verbatim to the stratum pool as your login (`wallet+10000`). All accepted shares are verifiable directly on the [MoneroOcean dashboard](https://moneroocean.stream/).
+- **100% Consented & User-Controlled**: Mining never runs in the background. Hashing starts only when you tick the consent box and press **Start**. Closing the tab or pressing **Stop** terminates all Web Workers immediately.
+- **Browser Performance Reality**: WebAssembly does not have access to OS huge pages or privileged hardware MSR registers, so browser hashrate is modest (~250–350 H/s on modern multi-core Apple Silicon / x86 CPUs) compared to bare-metal native XMRig. It serves as a zero-install, open-source reference implementation of RandomX in the browser.
 
 ## Highlights & Features
 
-- **Consented Hashing**: Starts only when the user presses **Start** with a valid Monero wallet and consents. Closing the tab or pressing Stop terminates all Worker execution.
 - **Multithreaded RandomX with Wasm JIT**: Employs a WebAssembly JIT compiler on top of the RandomX engine (`rx/0`), supporting shared ~2 GB dataset allocation across multiple C++ Web Worker pthreads.
 - **Static GitHub Pages Ready**: Built-in Service Worker COOP/COEP header injection (`sw.js` + `js/pwa.js`) automatically enables `crossOriginIsolated` and `SharedArrayBuffer` on static hosts (like GitHub Pages) without needing Cloudflare or custom server headers.
 - **Configurable Stratum Bridge**: Connects to any local (`ws://127.0.0.1:8787`) or custom self-hosted stratum bridge over WebSocket, configurable directly in the UI or via `?relay=` query parameter.
@@ -21,7 +28,7 @@ browser Wasm worker  --WS/WSS-->  stratum bridge  --TLS-->  MoneroOcean stratum
 
 ### 1. Start the Stratum Bridge
 
-The browser cannot open raw TCP/TLS stratum sockets directly due to browser security sandboxes. Run the lightweight bridge locally:
+Browsers cannot open raw TCP/TLS stratum sockets directly due to sandbox restrictions. Run the lightweight bridge locally:
 
 Using Docker:
 ```bash
@@ -47,7 +54,7 @@ Open [http://127.0.0.1:8099](http://127.0.0.1:8099) in your browser.
 
 1. Fork or push this repository to GitHub.
 2. In your repository settings, navigate to **Settings** → **Pages**.
-3. Under **Build and deployment**, set **Source** to **Deploy from a branch** and select your branch (e.g., `main` or `jit`) with folder `/ (root)`.
+3. Under **Build and deployment**, set **Source** to **Deploy from a branch** and select your branch (`main`), folder `/ (root)`.
 4. Your site will be live at `https://<username>.github.io/<repo>/`.
 5. On first visit, the Service Worker activates and reloads once to establish `crossOriginIsolated` headers, unlocking multithreaded fast mode!
 
