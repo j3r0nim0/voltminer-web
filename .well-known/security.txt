@@ -1,6 +1,4 @@
-Contact: https://github.com/j3r0nim0/android-xmrig-monero/security/advisories/new
-Contact: https://voltminer.net/about.html#contact
+Contact: https://github.com/j3r0nim0/voltminer-web/security/advisories/new
 Expires: 2027-10-03T00:00:00.000Z
-Canonical: https://web.voltminer.net/.well-known/security.txt
 Preferred-Languages: en
-Policy: https://web.voltminer.net/transparency/
+Policy: https://github.com/j3r0nim0/voltminer-web

@@ -134,8 +134,23 @@
             if (reloading) {
               reloading = false;
               location.reload(); // exactly once, then this context is gone
+            } else if (!window.crossOriginIsolated && !sessionStorage.getItem('vmw_coi_reload')) {
+              sessionStorage.setItem('vmw_coi_reload', '1');
+              location.reload();
             }
           });
+
+          // If the page is not crossOriginIsolated, ensure a reload occurs once the SW is active.
+          if (!window.crossOriginIsolated) {
+            navigator.serviceWorker.ready.then((r) => {
+              if (r.active && navigator.serviceWorker.controller && !sessionStorage.getItem('vmw_coi_reload')) {
+                sessionStorage.setItem('vmw_coi_reload', '1');
+                location.reload();
+              }
+            });
+          } else {
+            try { sessionStorage.removeItem('vmw_coi_reload'); } catch (_) {}
+          }
 
           document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') checkWaiting(reg);

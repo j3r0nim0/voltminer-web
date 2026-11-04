@@ -10,8 +10,13 @@
 </head>
 <body>
 <header class="nav"><div class="wrap">
-  <span class="brand" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner</span>
-  <nav><a href="../">Browser Experiment</a></nav>
+  <span class="brand" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner Web</span>
+  <nav>
+    <a href="../">Miner</a> ·
+    <a href="../diag.html">Diagnostics</a> ·
+    <a href="../notices.html">Notices</a> ·
+    <a href="https://github.com/j3r0nim0/voltminer-web" target="_blank" rel="noopener">GitHub</a>
+  </nav>
 </div></header>
 
 <section class="hero" style="padding-bottom:20px;"><div class="wrap">
@@ -33,14 +38,13 @@
     <h3>Audit it in five minutes</h3>
     <ol class="note">
       <li><strong>Read what runs.</strong> <a href="../index.html">The page</a> and the scripts in
-        <a href="../js/">js/</a> are not minified — view-source, or
-        <span class="mono">curl https://web.voltminer.net/js/miner-worker.js</span>.</li>
-      <li><strong>Check no third-party code can load.</strong>
-        <span class="mono">curl -sI https://web.voltminer.net/ | grep -i content-security-policy</span> →
-        <span class="mono">default-src 'none'; script-src 'self'; connect-src 'self' …</span>. No analytics, no CDN,
+        <a href="../js/">js/</a> are open source and unminified in the repository.</li>
+      <li><strong>Check no third-party code can load.</strong> The Content Security Policy pins
+        <span class="mono">default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ws: wss:; …</span>. No analytics, no CDN,
         no remote import, no inline script.</li>
       <li><strong>Check the bytes you were served.</strong>
-        <span class="mono">curl -s https://web.voltminer.net/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256</span>
+        <span class="mono">curl -s https://j3r0nim0.github.io/voltminer-web/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256</span>
+        (or in a local checkout: <span class="mono">shasum -a 256 js/vendor/randomx/web-randomx-mt.wasm</span>)
         and compare with <a href="SHA256SUMS">SHA256SUMS</a>.</li>
       <li><strong>Check the wasm is a build of public code.</strong> <a href="wasm-patch/">wasm-patch/</a> is the
         shared-memory <span class="mono">web-randomx-mt</span> build: every file we changed on top of
@@ -58,10 +62,8 @@
   </div>
 
   <div class="card">
-    <h3>What is not published</h3>
-    <p class="note">The rest of the product (UI code, design, the Anvil app): readable in your browser, not licensed for
-      reuse. The ~2 GB dataset is RandomX's cache for the current network seed stored in this origin's private storage —
-      delete it with the button on the page or by clearing site data.</p>
+    <h3>Open source & licensing</h3>
+    <p class="note">The entire project (HTML, CSS, JavaScript, WebAssembly build harnesses, and stratum bridge) is open source under the MIT and BSD licenses. The ~2 GB dataset is RandomX's cache for the current network seed stored in your browser's private OPFS/Cache storage — delete it anytime with the button on the page or by clearing site data.</p>
   </div>
 
   <div class="card">
@@ -72,16 +74,29 @@
   </div>
 
   <div class="card">
-    <h3>Who to tell</h3>
-    <p class="note">Security reports:
-      <a href="https://github.com/j3r0nim0/android-xmrig-monero/security/advisories/new" target="_blank" rel="noopener">GitHub advisories</a>
-      (also <a href="../.well-known/security.txt">/.well-known/security.txt</a>). Everything else:
-      <a href="https://voltminer.net/about.html#contact">contact</a>.</p>
+    <h3>Issues & inquiries</h3>
+    <p class="note">Bug reports, feature requests, and discussions:
+      <a href="https://github.com/j3r0nim0/voltminer-web/issues" target="_blank" rel="noopener">GitHub Issues</a>. Security reports:
+      <a href="https://github.com/j3r0nim0/voltminer-web/security/advisories/new" target="_blank" rel="noopener">GitHub Security Advisories</a>.</p>
     <p class="note">Third-party licences for the bundled Wasm (the RandomX engine and Berkeley SoftFloat are
       BSD-3-Clause; the wasm JIT backend is CC0; <span class="mono">jit_stubs/semifloat.c</span> and
       <span class="mono">mulh.c</span> are BSD-3-Clause © tevador and l-m; the Emscripten runtime is MIT) are in
       <a href="../js/vendor/randomx/NOTICE.txt">NOTICE.txt</a> and <a href="../notices.html">notices.html</a>.</p>
   </div>
 </div></section>
+
+  <footer>
+    <div class="wrap">
+      <div>⚡ VoltMiner Web — Open-source in-browser RandomX miner. 0% fee.</div>
+      <div>
+        <a href="../">Miner</a> ·
+        <a href="../diag.html">Device diagnostics</a> ·
+        <a href="../transparency/">Transparency</a> ·
+        <a href="../notices.html">Licenses & Notices</a> ·
+        <a href="https://github.com/j3r0nim0/voltminer-web" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <div class="muted">Released under the MIT License. Bundled RandomX/Wasm components are BSD-3-Clause.</div>
+    </div>
+  </footer>
 </body>
 </html>

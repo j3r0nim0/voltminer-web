@@ -19,7 +19,7 @@ export const DEFAULT_ORIGINS = [
 /** Local preview (python3 -m http.server) is allowed on loopback only. */
 export function originAllowed(origin, allowlist = new Set(DEFAULT_ORIGINS)) {
   if (!origin) return false;
-  if (allowlist.has(origin)) return true;
+  if (allowlist.has('*') || allowlist.has(origin)) return true;
   try {
     const u = new URL(origin);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;

@@ -1,76 +1,55 @@
-# Experimental web stratum bridge (VPS, not Cloudflare)
+# VoltMiner Web Stratum Bridge
 
-Origin-locked **WebSocket → TLS TCP** hop so `/mine.html` can speak RandomX
-stratum to MoneroOcean. Hashing stays in the browser. This process only copies
-newline-delimited JSON.
+Lightweight **WebSocket → TLS TCP** stratum bridge that connects web browsers to MoneroOcean. Hashing stays in the browser; this process only proxies newline-delimited stratum JSON.
 
 ```
-browser RandomX Wasm  --WSS-->  this bridge  --TLS-->  gulf.moneroocean.stream:20032
+browser RandomX Wasm  --WS/WSS-->  this bridge  --TLS-->  gulf.moneroocean.stream:20032
 ```
 
-**Not a product.** Same audience caveats as `/mine`: toy H/s vs the Android
-XMRig binary, ad-blockers, iOS will suspend the tab. You sit on wallet/login
-for the life of the socket — that’s why this is opt-in experiment infra, not
-the APK path (the app talks TLS to the pool itself).
+## Security & Architecture
 
-Ignore `node_modules/` — not committed.
+- **Origin lock.** Default allowlist includes `https://j3r0nim0.github.io` and local loopback. Setting `ALLOW_ORIGINS=*` allows requests from any web host.
+- **Hardcoded upstream.** Proxies to `gulf.moneroocean.stream:20032` (TLS) with certificate pinned by SHA-256 fingerprint.
+- **No fee cycle, no login swap.** The browser’s `mining.authorize` login is forwarded as-is.
+- **Session cap.** Configurable `BRIDGE_MAX_SESSIONS` (default 8) to protect host bandwidth.
 
-## Hard rules
+## Quick Start (Docker)
 
-- **Not a Cloudflare Worker.** `cloudflare:sockets` + public `WebSocketPair` is
-  the VPN/similar-proxy pattern in Cloudflare’s self-serve terms. Paid tier
-  does not change that. Run this on a VPS (or `localhost` for fun).
-- **Origin lock.** Default allowlist is `https://voltminer.net`,
-  `https://www.voltminer.net`, plus `http://localhost` / `127.0.0.1` for
-  preview. Anything else is `1008`.
-- **Upstream is hardcoded** to `gulf.moneroocean.stream:20032` (TLS). Clients
-  cannot pick a host.
-- **No fee cycle, no login swap.** The browser’s `mining.authorize` user is
-  forwarded as-is.
-- **Cap** `BRIDGE_MAX_SESSIONS` (default 8) so this cannot become a public
-  stratum farm.
+From the repository root:
 
-## Run locally
+```bash
+docker compose up -d
+```
+
+The bridge is now listening on `ws://127.0.0.1:8787` and ready to receive connections from GitHub Pages or localhost.
+
+## Run with Node.js
 
 ```bash
 cd tools/web-stratum-bridge
 npm install
-node server.mjs          # ws://127.0.0.1:8787
+node server.mjs          # listens on ws://127.0.0.1:8787
 ```
 
-Then in another terminal:
-
+Health check:
 ```bash
-cd website
-python3 -m http.server 8080
+curl http://127.0.0.1:8787/health
 ```
 
-Open `http://localhost:8080/mine.html`. The page uses `ws://127.0.0.1:8787`
-when the hostname is loopback.
+Run unit tests:
+```bash
+npm test
+```
 
-Health: `curl http://127.0.0.1:8787/health`
+## Self-Hosting in Production (with TLS)
 
-Tests (no pool): `npm test`
+If exposing the bridge over the public internet, put Caddy, Nginx, or Traefik in front to terminate TLS (`wss://`):
 
-## Production (your VPS)
+```caddy
+bridge.your-domain.com {
+    reverse_proxy 127.0.0.1:8787
+}
+```
 
-1. Listen on loopback: `BRIDGE_HOST=127.0.0.1 BRIDGE_PORT=8787 node server.mjs`
-2. Terminate TLS with caddy/nginx → `wss://bridge.voltminer.net`
-3. Restrict nginx to `Upgrade: websocket` + the same origins if you want a
-   second gate.
-4. Set `website/js/miner-client.js` `PROD_BRIDGE_WS` to that `wss://` URL
-   (or `localStorage.voltminer.web.bridgeWs` on the experiment page).
-
-Do **not** bind `0.0.0.0:8787` to the public internet without TLS.
-
-**Serving the page from voltminer.net?** That site's CSP is `connect-src 'self'`
-(`tools/server/Caddyfile:50`), so a page served from there cannot reach this hop — deliberate,
-it is what keeps the site's "one host, no exfiltration endpoint" claim honest. To mine through
-your own hop, serve the page from your own origin too. Options and tradeoffs:
-`docs/BACKLOG.md` -> "Hosting your own TCP hop".
-
-## What this does not do
-
-- Compile RandomX Wasm. See `website/js/vendor/randomx/NOTICE.txt`.
-- Make browser H/s comparable to the APK.
-- Replace MoneroOcean. P2Pool still needs a node whose wallet is yours.
+Then in the VoltMiner Web UI or URL parameter, set the bridge URL:
+`https://j3r0nim0.github.io/voltminer-web/?relay=wss://bridge.your-domain.com`

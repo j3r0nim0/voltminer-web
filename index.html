@@ -24,9 +24,12 @@
 <body>
   <header class="nav">
     <div class="wrap">
-      <span class="brand" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner</span>
+      <span class="brand" style="color:var(--text)"><span class="bolt">⚡</span> VoltMiner Web</span>
       <nav>
-        <a href="./" aria-current="page">Browser Experiment</a>
+        <a href="./" aria-current="page">Miner</a>
+        <a href="diag.html">Diagnostics</a>
+        <a href="notices.html">Notices</a>
+        <a href="https://github.com/j3r0nim0/voltminer-web" target="_blank" rel="noopener">GitHub</a>
       </nav>
     </div>
   </header>
@@ -61,7 +64,7 @@
         </div>
         <div class="note" id="install-ios-alt" hidden>
           This browser on iOS cannot install web apps. Open
-          <span class="mono">web.voltminer.net</span> in <strong>Safari</strong> to add it to the Home Screen.
+          this page in <strong>Safari</strong> to add it to the Home Screen.
         </div>
       </div>
     </div>
@@ -82,7 +85,7 @@
           <li><strong>One dataset, extra cores.</strong> With Fast mode on (and this page cross-origin isolated) the C++ pthreads share a single ~2 GB dataset — each extra thread adds only its scratchpad. The default is light/cache mode: it starts instantly, but hashes several times slower per share. Wasm: low-hundreds of H/s at best (~250–270 H/s at 4 threads on an M3 MacBook Air), not thousands.</li>
           <li><strong>Keep the tab visible.</strong> Background tabs pause Workers. Do not mash Start — extra logins can get the relay rate-limited.</li>
           <li><strong>RandomX, JIT-compiled in Wasm.</strong> Same algorithm family as native miners (<code>rx/0</code>). A WebAssembly JIT compiles RandomX programs as they are generated — roughly 4× the portable interpreter — but there are no huge pages, so it still falls well short of native.</li>
-          <li><strong>Why a relay.</strong> A browser cannot open the pool's TLS stratum socket, so a small origin-locked relay on our VPS forwards the WebSocket to the pool. It does not rewrite your login, the job, or the shares in either direction.</li>
+          <li><strong>Why a bridge relay.</strong> A browser cannot open a raw TCP or TLS stratum socket to the pool directly, so a lightweight WebSocket-to-Stratum bridge forwards messages between the browser and pool without altering credentials, jobs, or shares.</li>
         </ul>
       </aside>
 
@@ -92,7 +95,11 @@
           <input id="wallet" name="wallet" type="text" spellcheck="false" autocomplete="off"
                  placeholder="4… or 8… mainnet address" />
           <p class="note" id="wallet-hint">Standard (95) or integrated (106) Monero address. Never a private key.</p>
-          <p class="note" id="relay-note">Relay: <span class="mono" id="tr-relay-pre">—</span> — this site’s own origin-locked hop to the pool. It rewrites nothing in either direction; see <a href="transparency/">/transparency</a>.</p>
+
+          <label class="mine-label" for="bridge-url">Stratum bridge (WebSocket relay)</label>
+          <input id="bridge-url" name="bridge-url" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="ws://127.0.0.1:8787 or wss://your-bridge.example.com" />
+          <p class="note" id="relay-note">Relay: <span class="mono" id="tr-relay-pre">—</span> — WebSocket hop to the stratum pool. It rewrites nothing in either direction; see <a href="transparency/">/transparency</a>.</p>
 
           <label class="mine-label" for="threads">Threads: <strong id="threads-val">50%</strong>
             <span class="muted" id="threads-max">(detecting…)</span></label>
@@ -160,7 +167,7 @@
               <li>Write one thing to this site's private storage: a ~2 GB RandomX dataset cache, reused so it is not rebuilt every visit.</li>
               <li>Remember two small things locally: your address, and the <span class="mono">VMW-…</span> worker id.</li>
               <li>Keep a copy of <em>its own</em> files — this page, its script, its stylesheet, its icons — in one on-device cache, so the app opens offline. That cache holds nothing from anyone else.</li>
-              <li>Open a single WebSocket to this site's own relay, which forwards bytes to the pool unchanged.</li>
+              <li>Open a single WebSocket to your configured stratum bridge relay, which forwards bytes to the pool unchanged.</li>
             </ul>
           </div>
           <div>
@@ -176,9 +183,9 @@
           </div>
         </div>
         <p class="note">Check the bytes you were served yourself:
-          <span class="mono">curl -s https://web.voltminer.net/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256</span>
-          — published hashes, the wasm patch, the build recipe and the relay's source live in
-          <a href="transparency/">/transparency</a>. The relay rewrites nothing, so a redirected payout would show up as
+          <span class="mono" id="wasm-audit-curl">curl -s https://j3r0nim0.github.io/voltminer-web/js/vendor/randomx/web-randomx-mt.wasm | shasum -a 256</span>
+          — published hashes, the wasm patch, the build recipe and the bridge's source live in
+          <a href="transparency/">/transparency</a>. The bridge rewrites nothing, so a redirected payout would show up as
           somebody else's address on the MoneroOcean dashboard.</p>
         <p class="note">The offline copy is inspectable too: a browser keeps it under
           <strong>DevTools → Application → Service Workers and Cache Storage</strong>, and a phone keeps it under
@@ -191,15 +198,15 @@
 
   <footer>
     <div class="wrap">
-      <div>⚡ VoltMiner — Browser Experiment. 0% fee: we take no cut of your shares.</div>
+      <div>⚡ VoltMiner Web — Open-source in-browser RandomX miner. 0% fee.</div>
       <div>
-        <a href="./">Browser Experiment</a> ·
+        <a href="./">Miner</a> ·
         <a href="diag.html">Device diagnostics</a> ·
         <a href="transparency/">Transparency</a> ·
-        <a href="https://voltminer.net/about.html">About Us</a> ·
-        <a href="notices.html">Third-party notices</a>
+        <a href="notices.html">Licenses & Notices</a> ·
+        <a href="https://github.com/j3r0nim0/voltminer-web" target="_blank" rel="noopener">GitHub</a>
       </div>
-      <div class="muted">© 2026 VoltMiner. This page and its scripts are all rights reserved. Bundled RandomX/Wasm components are BSD-3-Clause — see notices.</div>
+      <div class="muted">Released under the MIT License. Bundled RandomX/Wasm components are BSD-3-Clause — see notices.</div>
     </div>
   </footer>
 

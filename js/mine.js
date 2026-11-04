@@ -20,6 +20,7 @@ const consentEl = document.querySelector('#mine-form input[name="consent"]') || 
 const form = $('mine-form');
 const startBtn = $('start');
 const stopBtn = $('stop');
+const bridgeEl = $('bridge-url');
 const statsBox = $('stats');
 const logEl = $('st-log');
 const moLink = $('mo-link');
@@ -215,6 +216,7 @@ function setRunningUI(running) {
   startBtn.disabled = running;
   stopBtn.disabled = !running;
   walletEl.disabled = running;
+  if (bridgeEl) bridgeEl.disabled = running;
   consentEl.disabled = running;
   // The dataset is a start-time decision (~6 min fill, ~2.5 GB), so the opt-in is not
   // live-switchable: disable it while running rather than let it look togglable.
@@ -249,12 +251,17 @@ function startMining() {
     setStatus('This device is on battery. Plug in, or uncheck “Only while charging” to mine anyway.');
     return;
   }
-  try { localStorage.setItem('voltminer.web.wallet', wallet); } catch (_) { /* ignore */ }
+  const bridgeUrl = (bridgeEl && bridgeEl.value.trim()) || defaultBridgeUrl();
+  try {
+    localStorage.setItem('voltminer.web.wallet', wallet);
+    if (bridgeEl && bridgeEl.value.trim()) localStorage.setItem('voltminer.web.bridge', bridgeUrl);
+  } catch (_) { /* ignore */ }
+  if (bridgeEl) bridgeEl.value = bridgeUrl;
   moLink.href = `https://moneroocean.stream/#/wallet/${encodeURIComponent(wallet)}/overview`;
 
-  // The relay in use, and the one-click check on the pool's own dashboard. The
-  // exact login it sends is already in the note next to the form.
-  trRelay.textContent = client.bridgeUrl || '—';
+  // The relay in use, and the one-click check on the pool's own dashboard.
+  trRelay.textContent = bridgeUrl;
+  if (trRelayPre) trRelayPre.textContent = bridgeUrl;
   trMo.href = moLink.href;
 
   setRunningUI(true);
@@ -269,6 +276,7 @@ function startMining() {
       password: workerId,
       threads: threadsForPercent(Number(threadsEl.value)),
       throttle: 0,
+      bridgeUrl,
       // ~2.5 GB fast dataset is opt-in; light/cache is the default.
       fullDataset: !!(fullDatasetEl && fullDatasetEl.checked),
     });
@@ -355,9 +363,14 @@ async function deleteCachedData() {
 }
 
 function forgetWallet() {
-  try { localStorage.removeItem('voltminer.web.wallet'); } catch (_) { /* ignore */ }
+  try {
+    localStorage.removeItem('voltminer.web.wallet');
+    localStorage.removeItem('voltminer.web.bridge');
+  } catch (_) { /* ignore */ }
   walletEl.value = '';
-  setStatus('Saved wallet forgotten — this browser no longer remembers an address.');
+  if (bridgeEl) bridgeEl.value = defaultBridgeUrl();
+  if (trRelayPre) trRelayPre.textContent = defaultBridgeUrl();
+  setStatus('Saved wallet and bridge settings forgotten.');
 }
 
 function armCap() {
@@ -413,11 +426,26 @@ const forgetBtn = document.getElementById('forget-wallet');
 if (forgetBtn) forgetBtn.addEventListener('click', (e) => { e.preventDefault(); forgetWallet(); });
 refreshStorage();
 initBattery();
-// Show the relay endpoint before Start too — it is a known value, so there is
-// no reason to make anyone press a button to see where their shares go.
-// ...and in a place that is visible before Start: the stats panel is hidden until
-// the first Start, so the row above it was written but never read by anyone who
-// had not pressed the button yet.
-if (trRelay) trRelay.textContent = defaultBridgeUrl();
-const trRelayPre = document.getElementById('tr-relay-pre');
-if (trRelayPre) trRelayPre.textContent = defaultBridgeUrl();
+const initialBridge = defaultBridgeUrl();
+if (bridgeEl) {
+  bridgeEl.value = initialBridge;
+  bridgeEl.addEventListener('input', () => {
+    const val = bridgeEl.value.trim();
+    const effective = val || defaultBridgeUrl();
+    if (trRelayPre) trRelayPre.textContent = effective;
+    if (trRelay) trRelay.textContent = effective;
+    try {
+      if (val) localStorage.setItem('voltminer.web.bridge', val);
+      else localStorage.removeItem('voltminer.web.bridge');
+    } catch (_) {}
+  });
+}
+if (trRelay) trRelay.textContent = initialBridge;
+if (trRelayPre) trRelayPre.textContent = initialBridge;
+const wasmAuditEl = document.getElementById('wasm-audit-curl');
+if (wasmAuditEl && typeof location !== 'undefined') {
+  try {
+    const wasmUrl = new URL('js/vendor/randomx/web-randomx-mt.wasm', location.href).href;
+    wasmAuditEl.textContent = `curl -s ${wasmUrl} | shasum -a 256`;
+  } catch (_) {}
+}

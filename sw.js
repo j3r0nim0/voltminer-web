@@ -35,6 +35,7 @@ const BYPASS = new Set([
   '/manifest.webmanifest',
 ]);
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) =>
       Promise.allSettled(
@@ -58,8 +59,6 @@ self.addEventListener('install', (event) => {
         }
       }
     }),
-    // No skipWaiting() here on purpose: the page decides when to hand over,
-    // so a live mining session is not interrupted mid-install.
   );
 });
 
@@ -112,24 +111,41 @@ function offlineFallback(reason, request) {
   );
 }
 
+function withCoiHeaders(response) {
+  if (!response || response.status === 0 || response.type === 'opaque') {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 async function networkFirst(request) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
     // cache: 'no-store' — the online HTML must never come from the HTTP cache.
-    return await fetch(request, { cache: 'no-store', signal: controller.signal });
+    const res = await fetch(request, { cache: 'no-store', signal: controller.signal });
+    return withCoiHeaders(res);
   } catch (err) {
     // Return the cached document intact so its Content-Type stays text/html.
     // ignoreSearch matters: an installed app launches at `./?src=pwa`, whose
     // exact URL was never precached, so an offline launch would miss the shell
     // and land on the fallback page. Fall back to the exact page first, so
     // diag.html and notices.html also work offline.
-    return (
+    const fallback = (
       (await caches.match(request, { ignoreSearch: true })) ||
       (await caches.match('./')) ||
       (await caches.match('./index.html')) ||
       offlineFallback((err && (err.name || err.message)) || 'fetch failed', request)
     );
+    return withCoiHeaders(fallback);
   } finally {
     clearTimeout(timer);
   }
@@ -154,10 +170,11 @@ async function staleWhileRevalidate(event) {
     try {
       event.waitUntil(revalidate.catch(() => {}));
     } catch { /* best effort: refresh on the next visit instead */ }
-    return cached;
+    return withCoiHeaders(cached);
   }
   // Nothing cached: the network result is the response, errors propagate.
-  return revalidate;
+  const netResp = await revalidate;
+  return withCoiHeaders(netResp);
 }
 
 self.addEventListener('fetch', (event) => {

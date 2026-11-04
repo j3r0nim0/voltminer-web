@@ -1,0 +1,14 @@
+services:
+  stratum-bridge:
+    build:
+      context: ./tools/web-stratum-bridge
+      dockerfile: Dockerfile
+    container_name: voltminer-bridge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      - BRIDGE_HOST=0.0.0.0
+      - BRIDGE_PORT=8787
+      - BRIDGE_MAX_SESSIONS=16
+      - ALLOW_ORIGINS=https://j3r0nim0.github.io,*

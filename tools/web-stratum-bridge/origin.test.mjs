@@ -4,9 +4,17 @@ import { originAllowed, parseAllowlist, DEFAULT_ORIGINS } from './origin.mjs';
 
 const allow = new Set(DEFAULT_ORIGINS);
 
-test('allows production site', () => {
+test('allows production and github.io site', () => {
+  assert.equal(originAllowed('https://j3r0nim0.github.io', allow), true);
   assert.equal(originAllowed('https://voltminer.net', allow), true);
   assert.equal(originAllowed('https://www.voltminer.net', allow), true);
+});
+
+test('supports wildcard allowlist (*)', () => {
+  const wildcard = new Set(['*']);
+  assert.equal(originAllowed('https://custom-domain.org', wildcard), true);
+  assert.equal(originAllowed('https://anywhere.io', wildcard), true);
+  assert.equal(originAllowed('', wildcard), false);
 });
 
 test('rejects missing / foreign origins', () => {

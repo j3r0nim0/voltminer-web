@@ -7,19 +7,29 @@
 
 export const POOL_NAME = 'gulf.moneroocean.stream:20032';
 
-/** Production bridge URL (DigitalOcean VPS, not Cloudflare). */
-export const PROD_BRIDGE_WS = 'wss://bridge.voltminer.net';
+/** Default local bridge endpoint (tools/web-stratum-bridge). */
+export const DEFAULT_LOCAL_BRIDGE = 'ws://127.0.0.1:8787';
 
 export function defaultBridgeUrl() {
-  // A relay override used to live in localStorage. That is a silent endpoint
-  // swap, which is exactly the mechanic this page tells you to distrust, so it
-  // now has to come from the URL (?relay=...) where you can see it in the bar.
+  // 1. Explicit query parameter ?relay=...
   try {
     const q = new URLSearchParams(location.search).get('relay');
-    if (q && /^wss?:\/\//i.test(q)) return q;
+    if (q && /^wss?:\/\//i.test(q)) return q.trim();
   } catch { /* ignore */ }
+
+  // 2. Saved user setting in localStorage
+  try {
+    const saved = localStorage.getItem('voltminer.web.bridge');
+    if (saved && /^wss?:\/\//i.test(saved.trim())) return saved.trim();
+  } catch { /* ignore */ }
+
+  // 3. Static host (GitHub Pages) or local loopback: default to local bridge
   const host = typeof location !== 'undefined' ? location.hostname : '';
-  if (host === 'localhost' || host === '127.0.0.1') return PROD_BRIDGE_WS;
+  if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.github.io')) {
+    return DEFAULT_LOCAL_BRIDGE;
+  }
+
+  // 4. Same-origin reverse proxy (/stratum) if hosted with a custom web server
   return relayUrl();
 }
 
@@ -34,7 +44,7 @@ export function relayUrl() {
       return u.href;
     }
   } catch { /* fall through */ }
-  return PROD_BRIDGE_WS;
+  return DEFAULT_LOCAL_BRIDGE;
 }
 
 export function hexToBytes(hex) {
