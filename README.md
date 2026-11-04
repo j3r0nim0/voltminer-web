@@ -82,7 +82,7 @@ The project is designed to be fully verifiable:
 
 ## License
 
-- Site frontend and bridge code: **MIT License** (see [LICENSE](LICENSE)).
+- Site frontend and bridge code: **GNU Affero General Public License v3.0 (GNU AGPLv3)** (see [LICENSE](LICENSE)).
 - Bundled RandomX / WebRandomX components: **BSD-3-Clause** (tevador, The Monero Project).
 - Emscripten runtime: **MIT / UIUC**.
 - See [notices.html](notices.html) and `js/vendor/randomx/NOTICE.txt` for full third-party notices.

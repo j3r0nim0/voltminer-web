@@ -66,7 +66,7 @@ field.
 
 ## Open source & dataset cache
 
-- The entire project (UI, client, workers, build harnesses, and bridge) is open source under the MIT and BSD licenses.
+- The entire project (UI, client, workers, build harnesses, and bridge) is open source under the GNU AGPLv3 and BSD licenses.
 - The 2 GB dataset is not data about you; it is RandomX's cache for the current
   network seed, stored in this origin's private storage. Delete it with the
   button on the page or by clearing site data.
